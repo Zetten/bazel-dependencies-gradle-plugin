@@ -23,7 +23,7 @@ class BazelDependenciesPluginTest {
         givenBuildScript("""
             plugins {
                 base
-                id("bazel-dependencies-plugin")
+                id("com.github.zetten.bazel-dependencies-plugin")
             }
 
             repositories {
@@ -53,7 +53,7 @@ class BazelDependenciesPluginTest {
         givenBuildScript("""
             plugins {
                 base
-                id("bazel-dependencies-plugin")
+                id("com.github.zetten.bazel-dependencies-plugin")
             }
 
             repositories {
@@ -89,7 +89,7 @@ class BazelDependenciesPluginTest {
         givenBuildScript("""
             plugins {
                 base
-                id("bazel-dependencies-plugin")
+                id("com.github.zetten.bazel-dependencies-plugin")
             }
 
             repositories {
