@@ -34,7 +34,9 @@ open class GenerateWorkspace @Inject constructor(private val workerExecutor: Wor
     fun generateWorkspace() {
         logger.info("Generating Bazel repository rules for {} dependencies", dependencies.size)
 
-        val snippetFiles = dependencies.map {
+        val sortedDependencies = dependencies.sorted()
+
+        val snippetFiles = sortedDependencies.map {
             val snippetFile = temporaryDir.resolve("${it.getBazelIdentifier()}.snippet")
             workerExecutor.submit(GenerateDependencySnippet::class.java, object : Action<WorkerConfiguration> {
                 override fun execute(config: WorkerConfiguration) {
@@ -45,21 +47,33 @@ open class GenerateWorkspace @Inject constructor(private val workerExecutor: Wor
             snippetFile
         }
 
+        outputFile.writeText("""
+            |load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
+            |
+            |def _replace_dependencies(dependencies, replacements):
+            |    new_dependencies = depset()
+            |    for dep in dependencies:
+            |        if dep in replacements.keys():
+            |            new_dependencies = depset(transitive = [new_dependencies, depset(direct = replacements.get(dep))])
+            |        else:
+            |            new_dependencies = depset(transitive = [new_dependencies, depset(direct = [dep])])
+            |    return new_dependencies.to_list()
+
+            |def java_repositories(
+            |""".trimMargin())
+        sortedDependencies.forEach {
+            outputFile.appendText("        omit_${it.getBazelIdentifier()} = False,\n")
+        }
+        outputFile.appendText("""
+            |        fetch_sources = False,
+            |        replacements = {}):
+            |""".trimMargin())
+        sortedDependencies.forEach {
+            outputFile.appendText("    if not omit_${it.getBazelIdentifier()}:\n        ${it.getBazelIdentifier()}(fetch_sources, replacements)\n")
+        }
+        outputFile.appendText("\n")
+
         workerExecutor.await()
-
-        outputFile.writeText("""load("@bazel_tools//tools/build_defs/repo:java.bzl", "java_import_external")
-
-def _replace_dependencies(dependencies, replacements):
-    new_dependencies = depset()
-    for dep in dependencies:
-        if dep in replacements.keys():
-            new_dependencies = depset(transitive = [new_dependencies, depset(direct = replacements.get(dep))])
-        else:
-            new_dependencies = depset(transitive = [new_dependencies, depset(direct = [dep])])
-    return new_dependencies.to_list()
-
-def java_repositories(excludes = [], replacements = {}):
-""")
 
         if (snippetFiles.isEmpty()) {
             outputFile.appendText("    pass\n")

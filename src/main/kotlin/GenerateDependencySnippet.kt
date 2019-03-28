@@ -1,6 +1,5 @@
 package com.github.zetten.bazeldeps
 
-import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.internal.hash.HashUtil
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -28,52 +27,33 @@ class GenerateDependencySnippet @Inject constructor(
         }
 
         val jarSha256 = HashUtil.sha256(dependency.jar).asZeroPaddedHexString(64)
-        val jarUrls = findArtifactUrls(dependency.getMavenIdentifier())
-        val (srcJarSha256, srcJarUrls) = findSrcJar(dependency.id, dependency.srcJar)
+        val jarUrls = findArtifactRepositories(dependency.getMavenIdentifier(), dependency.jar!!.extension)
 
-        val jarSnippet = """
-            jar_urls = [
-                ${jarUrls.sorted().joinToString("\n                ") { "\"${it}\"," }}
-            ],
-            jar_sha256 = "${jarSha256}","""
-        val srcJarSnippet = if (srcJarSha256 == null) "" else """
-            srcjar_urls = [
-                ${srcJarUrls.sorted().joinToString("\n                ") { "\"${it}\"," }}
-            ],
-            srcjar_sha256 = "${srcJarSha256}","""
-        val depsSnippet = if (dependency.dependencies.isEmpty()) "" else """
-            runtime_deps = _replace_dependencies([
-                ${dependency.dependencies.map { it.getBazelIdentifier() }.sorted().joinToString("\n                ") { "\"@${it}\"," }}
-            ], replacements),"""
-
-        outputFile.writeText("""    if "${dependency.getBazelIdentifier()}" not in excludes:
-        java_import_external(
-            name = "${dependency.getBazelIdentifier()}",
-            licenses = ["${mostRestrictiveLicense}"],""")
-        if (!jarSnippet.isEmpty()) {
-            outputFile.appendText(jarSnippet)
-        }
-        if (!srcJarSnippet.isEmpty()) {
-            outputFile.appendText(srcJarSnippet)
-        }
-        if (!depsSnippet.isEmpty()) {
-            outputFile.appendText(depsSnippet)
-        }
-        outputFile.appendText("""
+        outputFile.writeText("""
+                |def ${dependency.getBazelIdentifier()}(fetch_sources, replacements):
+                |    jvm_maven_import_external(
+                |        name = "${dependency.getBazelIdentifier()}",
+                |        artifact = "${dependency.getJvmMavenImportExternalCoordinates()}",
+                |        ${jarUrls.sorted().joinToString("\n", prefix = "server_urls = [\n", postfix = "\n        ") { "            \"${it}\"," }}],
+                |        artifact_sha256 = "${jarSha256}",
+                |        licenses = ["${mostRestrictiveLicense}"],
+                |        fetch_sources = fetch_sources,
+                |        ${dependency.dependencies.map { it.getBazelIdentifier() }.joinToString("", prefix = "runtime_deps = _replace_dependencies([", postfix = "\n        ") { "\n            \"@${it}\"," }}], replacements),
+                |    )
+                |""".trimMargin()
         )
-""")
     }
 
-    private fun findArtifactUrls(mavenIdentifier: String): List<String> {
+    private fun findArtifactRepositories(mavenIdentifier: String, extension: String): List<String> {
         return repositories.mapNotNull {
-            val artifactUrl = getArtifactUrl(mavenIdentifier, it) + ".jar"
+            val artifactUrl = "${getArtifactUrl(mavenIdentifier, it)}.${extension}"
             val code = with(URL(artifactUrl).openConnection() as HttpURLConnection) {
                 requestMethod = "HEAD"
                 connect()
                 responseCode
             }
             logger.debug("Received ${code} for artifact at ${artifactUrl}")
-            if (code in 100..399) artifactUrl else null
+            if (code in 100..399) it else null
         }
     }
 
@@ -97,15 +77,4 @@ class GenerateDependencySnippet @Inject constructor(
         ).joinToString("/")
     }
 
-    private fun findSrcJar(id: ModuleVersionIdentifier, srcJar: File?): SrcJarResult {
-        return if (srcJar != null) {
-            val srcJarSha256 = HashUtil.sha256(srcJar).asZeroPaddedHexString(64)
-            val srcJarUrls = findArtifactUrls(id.toString() + ":sources")
-            SrcJarResult(srcJarSha256, srcJarUrls)
-        } else
-            SrcJarResult(null, listOf())
-    }
-
 }
-
-data class SrcJarResult(val srcJarSha256: String?, val srcJarUrls: List<String>)

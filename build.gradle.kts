@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.zetten"
-version = "1.0.0"
+version = "1.1.0"
 
 description = """
 Generate Bazel Java dependency rules from Gradle project configuration
@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    compile("gradle.plugin.com.github.jk1:gradle-license-report:1.2")
+    compile("gradle.plugin.com.github.jk1:gradle-license-report:1.3")
     testImplementation("junit:junit:4.12")
 }
 

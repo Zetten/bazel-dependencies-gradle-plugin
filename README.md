@@ -12,6 +12,13 @@ Features:
 * Detects the most restrictive license for each dependency (using
   [`com.github.jk1.dependency-license-report`][3] plugin)
 
+## Compatibility
+
+Version 1.0.0 of the plugin should be compatible with most Bazel versions.
+Version 1.1.0 is compatible with Bazel &gt;= 0.23.0 as it generates
+`jvm_maven_import_external` rules making use of the `fetch_sources` attribute
+which did not exist prior to this version.
+
 ## Usage
 
 Applying the plugin provides a single task, `generateWorkspace`. This has some

@@ -1,21 +1,19 @@
 package com.github.zetten.bazeldeps
 
 import com.github.jk1.license.reader.ConfigurationReader
+import com.github.jk1.license.reader.ProjectReader
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
-import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
-import org.gradle.api.artifacts.result.ResolvedArtifactResult
-import org.gradle.jvm.JvmLibrary
 import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.getArtifacts
-import org.gradle.kotlin.dsl.withArtifacts
-import org.gradle.language.base.artifact.SourcesArtifact
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
+import com.github.jk1.license.reader.CachedModuleReader
+
+
 
 class BazelDependenciesPlugin : Plugin<Project> {
     private val logger: Logger = LoggerFactory.getLogger(BazelDependenciesPlugin::class.java)
@@ -32,7 +30,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
                     .flatMap { walkDependencies(it, project) }
                     .toHashSet()
 
-            val licenseConfigData = ConfigurationReader().read(project, configuration)
+            val licenseConfigData = ConfigurationReader(CachedModuleReader()).read(project, configuration)
             val dependencyLicenseData = HashMap<ProjectDependency, List<LicenseData>>()
 
             for (it in projectDependencies) {
@@ -73,30 +71,11 @@ class BazelDependenciesPlugin : Plugin<Project> {
                 id = resolvedDependency.module.id,
                 classifier = resolvedDependency.moduleArtifacts.first().classifier,
                 dependencies = firstOrderDeps,
-                jar = resolvedDependency.moduleArtifacts.first().file,
-                srcJar = findSrcJar(resolvedDependency.module.id, project)
+                jar = resolvedDependency.moduleArtifacts.first().file
         )
 
         return setOf(dep) + transitiveDeps
     }
-
-    private fun findSrcJar(id: ModuleVersionIdentifier, project: Project): File? {
-        val sourcesArtifacts = project.dependencies.createArtifactResolutionQuery()
-                .forModule(id.group, id.name, id.version)
-                .withArtifacts(JvmLibrary::class, SourcesArtifact::class)
-                .execute()
-                .resolvedComponents
-                .flatMap { it.getArtifacts(SourcesArtifact::class) }
-                .toSet()
-
-        if (sourcesArtifacts.size == 1) {
-            return (sourcesArtifacts.first() as ResolvedArtifactResult).file
-        } else if (sourcesArtifacts.size > 1) {
-            logger.warn("Artifact had multiple sources artifacts! Returning no srcJar for ${id}")
-        }
-        return null
-    }
-
 }
 
 open class BazelDependencies {

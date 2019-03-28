@@ -8,8 +8,7 @@ data class ProjectDependency(
         val id: ModuleVersionIdentifier,
         val classifier: String?,
         val dependencies: Set<ProjectDependency>,
-        val jar: File,
-        val srcJar: File?
+        val jar: File? = null
 ) : Comparable<ProjectDependency>, Serializable {
 
     fun getBazelIdentifier(): String {
@@ -22,9 +21,25 @@ data class ProjectDependency(
 
     fun getMavenIdentifier(): String {
         return if (classifier != null) {
-            "$id:${classifier}"
+            "$id:$classifier"
         } else {
             id.toString()
+        }
+    }
+
+    fun getJvmMavenImportExternalCoordinates(): String {
+        return if (classifier != null) {
+            "${id.group}:${id.name}${getArtifactPackaging()}:${classifier}:${id.version}"
+        } else {
+            "${id.group}:${id.name}${getArtifactPackaging()}:${id.version}"
+        }
+    }
+
+    private fun getArtifactPackaging(): String {
+        return if (!jar!!.extension.equals("jar")) {
+            ":${jar.extension}"
+        } else {
+            ""
         }
     }
 
@@ -34,6 +49,24 @@ data class ProjectDependency(
 
     override fun compareTo(other: ProjectDependency): Int {
         return getBazelIdentifier().compareTo(other.getBazelIdentifier())
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as ProjectDependency
+
+        if (id != other.id) return false
+        if (classifier != other.classifier) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + (classifier?.hashCode() ?: 0)
+        return result
     }
 
 }
