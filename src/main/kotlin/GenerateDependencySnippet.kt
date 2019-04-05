@@ -13,7 +13,8 @@ class GenerateDependencySnippet @Inject constructor(
         private val dependency: ProjectDependency,
         private val repositories: List<String>,
         private val licenseData: List<LicenseData>,
-        private val strictLicenses: Boolean) : Runnable {
+        private val strictLicenses: Boolean,
+        private val dependenciesAttr: String) : Runnable {
     private val logger: Logger = LoggerFactory.getLogger(GenerateDependencySnippet::class.java)
 
     override fun run() {
@@ -38,7 +39,10 @@ class GenerateDependencySnippet @Inject constructor(
                 |        artifact_sha256 = "${jarSha256}",
                 |        licenses = ["${mostRestrictiveLicense}"],
                 |        fetch_sources = fetch_sources,
-                |        ${dependency.dependencies.map { it.getBazelIdentifier() }.joinToString("", prefix = "runtime_deps = _replace_dependencies([", postfix = "\n        ") { "\n            \"@${it}\"," }}], replacements),
+                |        ${dependency.dependencies.map { it.getBazelIdentifier() }.joinToString("", prefix = "${dependenciesAttr} = _replace_dependencies([", postfix = "\n        ") { "\n            \"@${it}\"," }}], replacements),
+                |        tags = [
+                |            "maven_coordinates=${dependency.getMavenCoordinatesTag()}",
+                |        ],
                 |    )
                 |""".trimMargin()
         )

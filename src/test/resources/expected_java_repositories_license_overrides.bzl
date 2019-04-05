@@ -47,8 +47,11 @@ def com_google_code_findbugs_jsr305(fetch_sources, replacements):
         artifact_sha256 = "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7",
         licenses = ["restricted"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.code.findbugs:jsr305:3.0.2",
+        ],
     )
 
 def com_google_errorprone_error_prone_annotations(fetch_sources, replacements):
@@ -61,8 +64,11 @@ def com_google_errorprone_error_prone_annotations(fetch_sources, replacements):
         artifact_sha256 = "03d0329547c13da9e17c634d1049ea2ead093925e290567e1a364fd6b1fc7ff8",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.errorprone:error_prone_annotations:2.1.3",
+        ],
     )
 
 def com_google_guava_guava(fetch_sources, replacements):
@@ -75,13 +81,16 @@ def com_google_guava_guava(fetch_sources, replacements):
         artifact_sha256 = "a0e9cabad665bc20bcd2b01f108e5fc03f756e13aea80abaadb9f407033bea2c",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
             "@com_google_code_findbugs_jsr305",
             "@org_checkerframework_checker_qual",
             "@com_google_errorprone_error_prone_annotations",
             "@com_google_j2objc_j2objc_annotations",
             "@org_codehaus_mojo_animal_sniffer_annotations",
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.guava:guava:26.0-jre",
+        ],
     )
 
 def com_google_j2objc_j2objc_annotations(fetch_sources, replacements):
@@ -94,8 +103,11 @@ def com_google_j2objc_j2objc_annotations(fetch_sources, replacements):
         artifact_sha256 = "40ceb7157feb263949e0f503fe5f71689333a621021aa20ce0d0acee3badaa0f",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.j2objc:j2objc-annotations:1.1",
+        ],
     )
 
 def dom4j_dom4j(fetch_sources, replacements):
@@ -108,9 +120,12 @@ def dom4j_dom4j(fetch_sources, replacements):
         artifact_sha256 = "593552ffea3c5823c6602478b5002a7c525fd904a3c44f1abe4065c22edfac73",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
             "@xml_apis_xml_apis",
         ], replacements),
+        tags = [
+            "maven_coordinates=dom4j:dom4j:1.6.1",
+        ],
     )
 
 def org_checkerframework_checker_qual(fetch_sources, replacements):
@@ -123,8 +138,11 @@ def org_checkerframework_checker_qual(fetch_sources, replacements):
         artifact_sha256 = "64b02691c8b9d4e7700f8ee2e742dce7ea2c6e81e662b7522c9ee3bf568c040a",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=org.checkerframework:checker-qual:2.5.2",
+        ],
     )
 
 def org_codehaus_mojo_animal_sniffer_annotations(fetch_sources, replacements):
@@ -137,8 +155,11 @@ def org_codehaus_mojo_animal_sniffer_annotations(fetch_sources, replacements):
         artifact_sha256 = "2068320bd6bad744c3673ab048f67e30bef8f518996fa380033556600669905d",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=org.codehaus.mojo:animal-sniffer-annotations:1.14",
+        ],
     )
 
 def xml_apis_xml_apis(fetch_sources, replacements):
@@ -151,6 +172,9 @@ def xml_apis_xml_apis(fetch_sources, replacements):
         artifact_sha256 = "8232f3482c346d843e5e3fb361055771c1acc105b6d8a189eb9018c55948cf9f",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
-        runtime_deps = _replace_dependencies([
+        exports = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=xml-apis:xml-apis:1.0.b2",
+        ],
     )

@@ -49,6 +49,9 @@ def com_google_code_findbugs_jsr305(fetch_sources, replacements):
         fetch_sources = fetch_sources,
         runtime_deps = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.code.findbugs:jsr305:3.0.2",
+        ],
     )
 
 def com_google_errorprone_error_prone_annotations(fetch_sources, replacements):
@@ -63,6 +66,9 @@ def com_google_errorprone_error_prone_annotations(fetch_sources, replacements):
         fetch_sources = fetch_sources,
         runtime_deps = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.errorprone:error_prone_annotations:2.1.3",
+        ],
     )
 
 def com_google_guava_guava(fetch_sources, replacements):
@@ -82,6 +88,9 @@ def com_google_guava_guava(fetch_sources, replacements):
             "@com_google_j2objc_j2objc_annotations",
             "@org_codehaus_mojo_animal_sniffer_annotations",
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.guava:guava:26.0-jre",
+        ],
     )
 
 def com_google_j2objc_j2objc_annotations(fetch_sources, replacements):
@@ -96,6 +105,9 @@ def com_google_j2objc_j2objc_annotations(fetch_sources, replacements):
         fetch_sources = fetch_sources,
         runtime_deps = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=com.google.j2objc:j2objc-annotations:1.1",
+        ],
     )
 
 def dom4j_dom4j(fetch_sources, replacements):
@@ -111,6 +123,9 @@ def dom4j_dom4j(fetch_sources, replacements):
         runtime_deps = _replace_dependencies([
             "@xml_apis_xml_apis",
         ], replacements),
+        tags = [
+            "maven_coordinates=dom4j:dom4j:1.6.1",
+        ],
     )
 
 def org_checkerframework_checker_qual(fetch_sources, replacements):
@@ -125,6 +140,9 @@ def org_checkerframework_checker_qual(fetch_sources, replacements):
         fetch_sources = fetch_sources,
         runtime_deps = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=org.checkerframework:checker-qual:2.5.2",
+        ],
     )
 
 def org_codehaus_mojo_animal_sniffer_annotations(fetch_sources, replacements):
@@ -139,6 +157,9 @@ def org_codehaus_mojo_animal_sniffer_annotations(fetch_sources, replacements):
         fetch_sources = fetch_sources,
         runtime_deps = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=org.codehaus.mojo:animal-sniffer-annotations:1.14",
+        ],
     )
 
 def xml_apis_xml_apis(fetch_sources, replacements):
@@ -153,4 +174,7 @@ def xml_apis_xml_apis(fetch_sources, replacements):
         fetch_sources = fetch_sources,
         runtime_deps = _replace_dependencies([
         ], replacements),
+        tags = [
+            "maven_coordinates=xml-apis:xml-apis:1.0.b2",
+        ],
     )

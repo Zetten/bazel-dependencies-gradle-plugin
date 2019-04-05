@@ -59,6 +59,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
                 repositories = project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
                 licenseData = dependencyLicenseData
                 strictLicenses = bazelDependencies.strictLicenses
+                dependenciesAttr = bazelDependencies.dependenciesAttr
             }
         }
     }
@@ -83,4 +84,5 @@ open class BazelDependencies {
     lateinit var outputFile: File
     var strictLicenses: Boolean = true
     var licenseOverrides: Map<String, String> = mapOf()
+    var dependenciesAttr: String = "exports"
 }

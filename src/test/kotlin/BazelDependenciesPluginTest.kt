@@ -85,7 +85,7 @@ class BazelDependenciesPluginTest {
     }
 
     @Test
-    fun `non-strict license mode can be used`() {
+    fun `non-strict license mode can be used and dependencies attribute changed`() {
         givenBuildScript("""
             plugins {
                 base
@@ -107,6 +107,7 @@ class BazelDependenciesPluginTest {
                 configuration = generate
                 outputFile = project.buildDir.resolve("java_repositories.bzl")
                 strictLicenses = false
+                dependenciesAttr = "runtime_deps"
             }
         """.trimIndent())
 

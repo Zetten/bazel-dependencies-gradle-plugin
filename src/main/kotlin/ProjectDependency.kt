@@ -35,6 +35,16 @@ data class ProjectDependency(
         }
     }
 
+    fun getMavenCoordinatesTag(): String {
+        return if (classifier != null) {
+            // TODO either type+classifier or neither - no type-only mapping possible?
+            // https://github.com/google/bazel-common/blob/f1115e0f777f08c3cdb115526c4e663005bec69b/tools/maven/pom_file.bzl#L144
+            "$id:${jar!!.extension}:$classifier"
+        } else {
+            id.toString()
+        }
+    }
+
     private fun getArtifactPackaging(): String {
         return if (!jar!!.extension.equals("jar")) {
             ":${jar.extension}"
