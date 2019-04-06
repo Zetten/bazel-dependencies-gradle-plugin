@@ -29,8 +29,10 @@ data class ProjectDependency(
 
     fun getJvmMavenImportExternalCoordinates(): String {
         return if (classifier != null) {
-            "${id.group}:${id.name}${getArtifactPackaging()}:${classifier}:${id.version}"
+            // If classifier is present, packaging must be provided...
+            "${id.group}:${id.name}:${jar!!.extension}:${classifier}:${id.version}"
         } else {
+            // ...otherwise it's optional, with default=jar
             "${id.group}:${id.name}${getArtifactPackaging()}:${id.version}"
         }
     }
