@@ -30,6 +30,9 @@ open class GenerateWorkspace @Inject constructor(private val workerExecutor: Wor
     @Input
     lateinit var dependenciesAttr: String
 
+    @Input
+    var safeSources: Boolean = false
+
     @OutputFile
     lateinit var outputFile: File
 
@@ -44,7 +47,7 @@ open class GenerateWorkspace @Inject constructor(private val workerExecutor: Wor
             workerExecutor.submit(GenerateDependencySnippet::class.java, object : Action<WorkerConfiguration> {
                 override fun execute(config: WorkerConfiguration) {
                     config.isolationMode = IsolationMode.NONE
-                    config.params(snippetFile, it, repositories, licenseData[it], strictLicenses, dependenciesAttr)
+                    config.params(snippetFile, it, repositories, licenseData[it], strictLicenses, dependenciesAttr, safeSources)
                 }
             })
             snippetFile

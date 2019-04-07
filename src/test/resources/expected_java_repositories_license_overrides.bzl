@@ -12,7 +12,9 @@ def _replace_dependencies(dependencies, replacements):
 def java_repositories(
         omit_com_google_code_findbugs_jsr305 = False,
         omit_com_google_errorprone_error_prone_annotations = False,
+        omit_com_google_guava_failureaccess = False,
         omit_com_google_guava_guava = False,
+        omit_com_google_guava_listenablefuture = False,
         omit_com_google_j2objc_j2objc_annotations = False,
         omit_dom4j_dom4j = False,
         omit_org_checkerframework_checker_qual = False,
@@ -24,8 +26,12 @@ def java_repositories(
         com_google_code_findbugs_jsr305(fetch_sources, replacements)
     if not omit_com_google_errorprone_error_prone_annotations:
         com_google_errorprone_error_prone_annotations(fetch_sources, replacements)
+    if not omit_com_google_guava_failureaccess:
+        com_google_guava_failureaccess(fetch_sources, replacements)
     if not omit_com_google_guava_guava:
         com_google_guava_guava(fetch_sources, replacements)
+    if not omit_com_google_guava_listenablefuture:
+        com_google_guava_listenablefuture(fetch_sources, replacements)
     if not omit_com_google_j2objc_j2objc_annotations:
         com_google_j2objc_j2objc_annotations(fetch_sources, replacements)
     if not omit_dom4j_dom4j:
@@ -57,31 +63,50 @@ def com_google_code_findbugs_jsr305(fetch_sources, replacements):
 def com_google_errorprone_error_prone_annotations(fetch_sources, replacements):
     jvm_maven_import_external(
         name = "com_google_errorprone_error_prone_annotations",
-        artifact = "com.google.errorprone:error_prone_annotations:2.1.3",
+        artifact = "com.google.errorprone:error_prone_annotations:2.2.0",
         server_urls = [
             "https://jcenter.bintray.com/",
         ],
-        artifact_sha256 = "03d0329547c13da9e17c634d1049ea2ead093925e290567e1a364fd6b1fc7ff8",
+        artifact_sha256 = "6ebd22ca1b9d8ec06d41de8d64e0596981d9607b42035f9ed374f9de271a481a",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
         exports = _replace_dependencies([
         ], replacements),
         tags = [
-            "maven_coordinates=com.google.errorprone:error_prone_annotations:2.1.3",
+            "maven_coordinates=com.google.errorprone:error_prone_annotations:2.2.0",
+        ],
+    )
+
+def com_google_guava_failureaccess(fetch_sources, replacements):
+    jvm_maven_import_external(
+        name = "com_google_guava_failureaccess",
+        artifact = "com.google.guava:failureaccess:1.0.1",
+        server_urls = [
+            "https://jcenter.bintray.com/",
+        ],
+        artifact_sha256 = "a171ee4c734dd2da837e4b16be9df4661afab72a41adaf31eb84dfdaf936ca26",
+        licenses = ["notice"],
+        fetch_sources = fetch_sources,
+        exports = _replace_dependencies([
+        ], replacements),
+        tags = [
+            "maven_coordinates=com.google.guava:failureaccess:1.0.1",
         ],
     )
 
 def com_google_guava_guava(fetch_sources, replacements):
     jvm_maven_import_external(
         name = "com_google_guava_guava",
-        artifact = "com.google.guava:guava:26.0-jre",
+        artifact = "com.google.guava:guava:27.1-jre",
         server_urls = [
             "https://jcenter.bintray.com/",
         ],
-        artifact_sha256 = "a0e9cabad665bc20bcd2b01f108e5fc03f756e13aea80abaadb9f407033bea2c",
+        artifact_sha256 = "4a5aa70cc968a4d137e599ad37553e5cfeed2265e8c193476d7119036c536fe7",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
         exports = _replace_dependencies([
+            "@com_google_guava_failureaccess",
+            "@com_google_guava_listenablefuture",
             "@com_google_code_findbugs_jsr305",
             "@org_checkerframework_checker_qual",
             "@com_google_errorprone_error_prone_annotations",
@@ -89,7 +114,24 @@ def com_google_guava_guava(fetch_sources, replacements):
             "@org_codehaus_mojo_animal_sniffer_annotations",
         ], replacements),
         tags = [
-            "maven_coordinates=com.google.guava:guava:26.0-jre",
+            "maven_coordinates=com.google.guava:guava:27.1-jre",
+        ],
+    )
+
+def com_google_guava_listenablefuture(fetch_sources, replacements):
+    jvm_maven_import_external(
+        name = "com_google_guava_listenablefuture",
+        artifact = "com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava",
+        server_urls = [
+            "https://jcenter.bintray.com/",
+        ],
+        artifact_sha256 = "b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99",
+        licenses = ["notice"],
+        fetch_sources = False,
+        exports = _replace_dependencies([
+        ], replacements),
+        tags = [
+            "maven_coordinates=com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava",
         ],
     )
 
@@ -148,17 +190,17 @@ def org_checkerframework_checker_qual(fetch_sources, replacements):
 def org_codehaus_mojo_animal_sniffer_annotations(fetch_sources, replacements):
     jvm_maven_import_external(
         name = "org_codehaus_mojo_animal_sniffer_annotations",
-        artifact = "org.codehaus.mojo:animal-sniffer-annotations:1.14",
+        artifact = "org.codehaus.mojo:animal-sniffer-annotations:1.17",
         server_urls = [
             "https://jcenter.bintray.com/",
         ],
-        artifact_sha256 = "2068320bd6bad744c3673ab048f67e30bef8f518996fa380033556600669905d",
+        artifact_sha256 = "92654f493ecfec52082e76354f0ebf87648dc3d5cec2e3c3cdb947c016747a53",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
         exports = _replace_dependencies([
         ], replacements),
         tags = [
-            "maven_coordinates=org.codehaus.mojo:animal-sniffer-annotations:1.14",
+            "maven_coordinates=org.codehaus.mojo:animal-sniffer-annotations:1.17",
         ],
     )
 

@@ -39,6 +39,16 @@ applicable licenses, and emit a file which can be loaded in a Bazel WORKSPACE.
   cannot be determined.
 * `licenseOverrides` (default `{}`): A `Map<String, String>` to set and/or
   override license detection for specific dependency identifiers.
+* `dependenciesAttr` (default `"exports"`): A `String` used to set the
+  repository rule attribute for dependencies. The default value provides
+  Maven-like transitive inclusion by making each artifact fully export its
+  dependencies. A convenient alternative may be `runtime_deps` to provide
+  transitive dependencies only on the runtime classpath.
+* `safeSources` (default `False`): A `Boolean` to control whether 
+  `generateWorkspace` should perform a GET request to ensure `fetch_sources`
+  is `False` when source jars can't be found in any repository. This may
+  slow down the generation but allows safer usage of `fetch_sources = True`
+  in the generated WORKSPACE function.
 
 ## Example (kotlin-dsl)
 

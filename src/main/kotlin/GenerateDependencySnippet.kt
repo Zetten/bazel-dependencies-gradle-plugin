@@ -14,7 +14,8 @@ class GenerateDependencySnippet @Inject constructor(
         private val repositories: List<String>,
         private val licenseData: List<LicenseData>,
         private val strictLicenses: Boolean,
-        private val dependenciesAttr: String) : Runnable {
+        private val dependenciesAttr: String,
+        private val safeSources: Boolean) : Runnable {
     private val logger: Logger = LoggerFactory.getLogger(GenerateDependencySnippet::class.java)
 
     override fun run() {
@@ -38,7 +39,7 @@ class GenerateDependencySnippet @Inject constructor(
                 |        ${jarUrls.sorted().joinToString("\n", prefix = "server_urls = [\n", postfix = "\n        ") { "            \"${it}\"," }}],
                 |        artifact_sha256 = "${jarSha256}",
                 |        licenses = ["${mostRestrictiveLicense}"],
-                |        fetch_sources = fetch_sources,
+                |        fetch_sources = ${if (safeSources && !sourcesExist(dependency.getMavenIdentifier())) "False" else "fetch_sources"},
                 |        ${dependency.dependencies.map { it.getBazelIdentifier() }.joinToString("", prefix = "${dependenciesAttr} = _replace_dependencies([", postfix = "\n        ") { "\n            \"@${it}\"," }}], replacements),
                 |        tags = [
                 |            "maven_coordinates=${dependency.getMavenCoordinatesTag()}",
@@ -59,6 +60,20 @@ class GenerateDependencySnippet @Inject constructor(
             logger.debug("Received ${code} for artifact at ${artifactUrl}")
             if (code in 100..399) it else null
         }
+    }
+
+    private fun sourcesExist(mavenIdentifier: String): Boolean {
+        for (it in repositories) {
+            val artifactUrl = "${getArtifactUrl(mavenIdentifier, it)}-sources.jar"
+            val code = with(URL(artifactUrl).openConnection() as HttpURLConnection) {
+                requestMethod = "HEAD"
+                connect()
+                responseCode
+            }
+            logger.debug("Received ${code} for sources artifact at ${artifactUrl}")
+            if (code in 100..399) return true
+        }
+        return false
     }
 
     private fun getArtifactUrl(mavenIdentifier: String, repoUrl: String): String {

@@ -49,7 +49,7 @@ class BazelDependenciesPluginTest {
     }
 
     @Test
-    fun `per-dependency licenses can be set and overridden`() {
+    fun `per-dependency licenses can be set and overridden and sources checked`() {
         givenBuildScript("""
             plugins {
                 base
@@ -63,7 +63,7 @@ class BazelDependenciesPluginTest {
             val generate by configurations.creating
 
             dependencies {
-                generate("com.google.guava:guava:26.0-jre")
+                generate("com.google.guava:guava:27.1-jre") // imports com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava which has no srcjar, i.e. `fetch_sources = False`
                 generate("dom4j:dom4j:1.6.1")
             }
 
@@ -74,6 +74,7 @@ class BazelDependenciesPluginTest {
                     Pair("dom4j:dom4j:1.6.1", "notice"), // https://github.com/dom4j/dom4j/blob/master/LICENSE
                     Pair("com.google.code.findbugs:jsr305:3.0.2", "restricted") // overrides "notice"
                 )
+                safeSources = true
             }
         """.trimIndent())
 

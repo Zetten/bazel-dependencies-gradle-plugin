@@ -60,6 +60,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
                 licenseData = dependencyLicenseData
                 strictLicenses = bazelDependencies.strictLicenses
                 dependenciesAttr = bazelDependencies.dependenciesAttr
+                safeSources = bazelDependencies.safeSources
             }
         }
     }
@@ -85,4 +86,5 @@ open class BazelDependencies {
     var strictLicenses: Boolean = true
     var licenseOverrides: Map<String, String> = mapOf()
     var dependenciesAttr: String = "exports"
+    var safeSources: Boolean = false
 }
