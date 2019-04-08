@@ -75,6 +75,7 @@ class BazelDependenciesPluginTest {
                     Pair("com.google.code.findbugs:jsr305:3.0.2", "restricted") // overrides "notice"
                 )
                 safeSources = true
+                sourcesChecksums = true
             }
         """.trimIndent())
 

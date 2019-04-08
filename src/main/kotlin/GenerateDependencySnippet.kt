@@ -30,6 +30,7 @@ class GenerateDependencySnippet @Inject constructor(
 
         val jarSha256 = HashUtil.sha256(dependency.jar).asZeroPaddedHexString(64)
         val jarUrls = findArtifactRepositories(dependency.getMavenIdentifier(), dependency.jar!!.extension)
+        val srcjarSha256 = if (dependency.srcJar != null) "\"${HashUtil.sha256(dependency.srcJar).asZeroPaddedHexString(64)}\"" else "None"
 
         outputFile.writeText("""
                 |def ${dependency.getBazelIdentifier()}(fetch_sources, replacements):
@@ -39,7 +40,8 @@ class GenerateDependencySnippet @Inject constructor(
                 |        ${jarUrls.sorted().joinToString("\n", prefix = "server_urls = [\n", postfix = "\n        ") { "            \"${it}\"," }}],
                 |        artifact_sha256 = "${jarSha256}",
                 |        licenses = ["${mostRestrictiveLicense}"],
-                |        fetch_sources = ${if (safeSources && !sourcesExist(dependency.getMavenIdentifier())) "False" else "fetch_sources"},
+                |        fetch_sources = ${getFetchSources()},
+                |        srcjar_sha256 = ${srcjarSha256},
                 |        ${dependency.dependencies.map { it.getBazelIdentifier() }.joinToString("", prefix = "${dependenciesAttr} = _replace_dependencies([", postfix = "\n        ") { "\n            \"@${it}\"," }}], replacements),
                 |        tags = [
                 |            "maven_coordinates=${dependency.getMavenCoordinatesTag()}",
@@ -61,6 +63,9 @@ class GenerateDependencySnippet @Inject constructor(
             if (code in 100..399) it else null
         }
     }
+
+    private fun getFetchSources() =
+            if (safeSources && !sourcesExist(dependency.getMavenIdentifier())) "False" else "fetch_sources"
 
     private fun sourcesExist(mavenIdentifier: String): Boolean {
         for (it in repositories) {

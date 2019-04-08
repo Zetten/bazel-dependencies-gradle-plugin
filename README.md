@@ -49,6 +49,11 @@ applicable licenses, and emit a file which can be loaded in a Bazel WORKSPACE.
   is `False` when source jars can't be found in any repository. This may
   slow down the generation but allows safer usage of `fetch_sources = True`
   in the generated WORKSPACE function.
+* `sourcesChecksums` (default `False`): A `Boolean` to add determination of
+  `srcjar_sha256` attributes in the generated repository rules. This may slow
+  down the generation, as Gradle resolves the source jars independently of the
+  artifacts, but allows safer usage of `fetch_sources = True` (and reduces
+  Bazel's noisy logging of sha256 values which were not provided in the rules).
 
 ## Example (kotlin-dsl)
 

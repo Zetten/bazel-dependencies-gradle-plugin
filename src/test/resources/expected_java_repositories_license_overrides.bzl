@@ -53,6 +53,7 @@ def com_google_code_findbugs_jsr305(fetch_sources, replacements):
         artifact_sha256 = "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7",
         licenses = ["restricted"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "1c9e85e272d0708c6a591dc74828c71603053b48cc75ae83cce56912a2aa063b",
         exports = _replace_dependencies([
         ], replacements),
         tags = [
@@ -70,6 +71,7 @@ def com_google_errorprone_error_prone_annotations(fetch_sources, replacements):
         artifact_sha256 = "6ebd22ca1b9d8ec06d41de8d64e0596981d9607b42035f9ed374f9de271a481a",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "626adccd4894bee72c3f9a0384812240dcc1282fb37a87a3f6cb94924a089496",
         exports = _replace_dependencies([
         ], replacements),
         tags = [
@@ -87,6 +89,7 @@ def com_google_guava_failureaccess(fetch_sources, replacements):
         artifact_sha256 = "a171ee4c734dd2da837e4b16be9df4661afab72a41adaf31eb84dfdaf936ca26",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "092346eebbb1657b51aa7485a246bf602bb464cc0b0e2e1c7e7201fadce1e98f",
         exports = _replace_dependencies([
         ], replacements),
         tags = [
@@ -104,6 +107,7 @@ def com_google_guava_guava(fetch_sources, replacements):
         artifact_sha256 = "4a5aa70cc968a4d137e599ad37553e5cfeed2265e8c193476d7119036c536fe7",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "9de05c573971cedfcd53fb85fc7a58a5f453053026a9bf18594cffc79a1d6874",
         exports = _replace_dependencies([
             "@com_google_guava_failureaccess",
             "@com_google_guava_listenablefuture",
@@ -128,6 +132,7 @@ def com_google_guava_listenablefuture(fetch_sources, replacements):
         artifact_sha256 = "b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99",
         licenses = ["notice"],
         fetch_sources = False,
+        srcjar_sha256 = None,
         exports = _replace_dependencies([
         ], replacements),
         tags = [
@@ -145,6 +150,7 @@ def com_google_j2objc_j2objc_annotations(fetch_sources, replacements):
         artifact_sha256 = "40ceb7157feb263949e0f503fe5f71689333a621021aa20ce0d0acee3badaa0f",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "4858405565875ccbc050af3ad95809b32994796917c5b55ee59e186c82fc2502",
         exports = _replace_dependencies([
         ], replacements),
         tags = [
@@ -162,6 +168,7 @@ def dom4j_dom4j(fetch_sources, replacements):
         artifact_sha256 = "593552ffea3c5823c6602478b5002a7c525fd904a3c44f1abe4065c22edfac73",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "4d37275f80991a37be460e73b01890172f82fd561253ba2130b62a7a5d07222d",
         exports = _replace_dependencies([
             "@xml_apis_xml_apis",
         ], replacements),
@@ -180,6 +187,7 @@ def org_checkerframework_checker_qual(fetch_sources, replacements):
         artifact_sha256 = "64b02691c8b9d4e7700f8ee2e742dce7ea2c6e81e662b7522c9ee3bf568c040a",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "821c5c63a6f156a3bb498c5bbb613580d9d8f4134131a5627d330fc4018669d2",
         exports = _replace_dependencies([
         ], replacements),
         tags = [
@@ -197,6 +205,7 @@ def org_codehaus_mojo_animal_sniffer_annotations(fetch_sources, replacements):
         artifact_sha256 = "92654f493ecfec52082e76354f0ebf87648dc3d5cec2e3c3cdb947c016747a53",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "2571474a676f775a8cdd15fb9b1da20c4c121ed7f42a5d93fca0e7b6e2015b40",
         exports = _replace_dependencies([
         ], replacements),
         tags = [
@@ -214,6 +223,7 @@ def xml_apis_xml_apis(fetch_sources, replacements):
         artifact_sha256 = "8232f3482c346d843e5e3fb361055771c1acc105b6d8a189eb9018c55948cf9f",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
+        srcjar_sha256 = "469f17d8a34cba6554769b2be7fd0727c1ca28536c7929bbc1572753452b596a",
         exports = _replace_dependencies([
         ], replacements),
         tags = [

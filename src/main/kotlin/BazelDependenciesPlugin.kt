@@ -1,18 +1,22 @@
 package com.github.zetten.bazeldeps
 
+import com.github.jk1.license.reader.CachedModuleReader
 import com.github.jk1.license.reader.ConfigurationReader
-import com.github.jk1.license.reader.ProjectReader
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+import org.gradle.api.artifacts.result.ResolvedArtifactResult
+import org.gradle.jvm.JvmLibrary
 import org.gradle.kotlin.dsl.create
+import org.gradle.kotlin.dsl.getArtifacts
+import org.gradle.kotlin.dsl.withArtifacts
+import org.gradle.language.base.artifact.SourcesArtifact
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
-import com.github.jk1.license.reader.CachedModuleReader
-
 
 
 class BazelDependenciesPlugin : Plugin<Project> {
@@ -27,7 +31,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
 
             val configuration = bazelDependencies.configuration
             val projectDependencies = configuration.resolvedConfiguration.firstLevelModuleDependencies
-                    .flatMap { walkDependencies(it, project) }
+                    .flatMap { walkDependencies(it, project, bazelDependencies.sourcesChecksums) }
                     .toHashSet()
 
             val licenseConfigData = ConfigurationReader(CachedModuleReader()).read(project, configuration)
@@ -65,18 +69,36 @@ class BazelDependenciesPlugin : Plugin<Project> {
         }
     }
 
-    private fun walkDependencies(resolvedDependency: ResolvedDependency, project: Project): Iterable<ProjectDependency> {
-        val transitiveDeps = resolvedDependency.children.flatMap { walkDependencies(it, project) }.toSet()
+    private fun walkDependencies(resolvedDependency: ResolvedDependency, project: Project, resolveSrcJars: Boolean): Iterable<ProjectDependency> {
+        val transitiveDeps = resolvedDependency.children.flatMap { walkDependencies(it, project, resolveSrcJars) }.toSet()
         val firstOrderDeps = resolvedDependency.children.map { i -> transitiveDeps.first { j -> i.module.id == j.id } }.toSet()
 
         val dep = ProjectDependency(
                 id = resolvedDependency.module.id,
                 classifier = resolvedDependency.moduleArtifacts.first().classifier,
                 dependencies = firstOrderDeps,
-                jar = resolvedDependency.moduleArtifacts.first().file
+                jar = resolvedDependency.moduleArtifacts.first().file,
+                srcJar = if (resolveSrcJars) findSrcJar(resolvedDependency.module.id, project) else null
         )
 
         return setOf(dep) + transitiveDeps
+    }
+
+    private fun findSrcJar(id: ModuleVersionIdentifier, project: Project): File? {
+        val sourcesArtifacts = project.dependencies.createArtifactResolutionQuery()
+                .forModule(id.group, id.name, id.version)
+                .withArtifacts(JvmLibrary::class, SourcesArtifact::class)
+                .execute()
+                .resolvedComponents
+                .flatMap { it.getArtifacts(SourcesArtifact::class) }
+                .toSet()
+
+        if (sourcesArtifacts.size == 1) {
+            return (sourcesArtifacts.first() as ResolvedArtifactResult).file
+        } else if (sourcesArtifacts.size > 1) {
+            logger.warn("Artifact had multiple sources artifacts! Returning no srcJar for ${id}")
+        }
+        return null
     }
 }
 
@@ -87,4 +109,5 @@ open class BazelDependencies {
     var licenseOverrides: Map<String, String> = mapOf()
     var dependenciesAttr: String = "exports"
     var safeSources: Boolean = false
+    var sourcesChecksums: Boolean = false
 }

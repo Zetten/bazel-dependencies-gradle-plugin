@@ -8,7 +8,8 @@ data class ProjectDependency(
         val id: ModuleVersionIdentifier,
         val classifier: String?,
         val dependencies: Set<ProjectDependency>,
-        val jar: File? = null
+        val jar: File? = null,
+        val srcJar: File? = null
 ) : Comparable<ProjectDependency>, Serializable {
 
     fun getBazelIdentifier(): String {
