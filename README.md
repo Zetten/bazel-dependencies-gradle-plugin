@@ -14,10 +14,17 @@ Features:
 
 ## Compatibility
 
-Version 1.0.0 of the plugin should be compatible with most Bazel versions.
-Version 1.1.0 is compatible with Bazel &gt;= 0.23.0 as it generates
-`jvm_maven_import_external` rules making use of the `fetch_sources` attribute
-which did not exist prior to this version.
+* Version 1.0.0 of the plugin should be compatible with most Bazel versions.
+* Version 1.1.0 is compatible with Bazel &gt;= 0.23.0 as it generates
+  `jvm_maven_import_external` rules making use of the `fetch_sources` attribute
+  which did not exist prior to this version.
+* Version 1.5.0 provides initial support for [rules_jvm_external][4]. This
+  includes the generation of the artifact list for a complete dependency
+  closure, evaluated by gradle, which therefore enables support for maven BOMs
+  and custom dependency resolution behaviour.
+  
+  The call to `maven_install` should specify `version_conflict_policy = "pinned"`
+  to ensure coursier does not resolve dependencies outside this closure.
 
 ## Usage
 
@@ -34,6 +41,12 @@ applicable licenses, and emit a file which can be loaded in a Bazel WORKSPACE.
 
 ### Optional configuration parameters
 
+* `mode` (default `com.github.zetten.bazeldeps.BazelDependenciesMode.JVM_MAVEN_IMPORT_EXTERNAL`):
+  Configures the chosen output mode. `JVM_MAVEN_IMPORT_EXTERNAL` will produce
+  a set of `jvm_maven_import_external` repository rules for the required
+  artifacts. `RULES_JVM_EXTERNAL` will emit `REPOSITORIES` and `ARTIFACTS`
+  attributes which can be imported and passed to `maven_install` from
+  [rules_jvm_external][4].
 * `strictLicenses` (default `True`): A `Boolean` to control whether
   `generateWorkspace` should fail in the event that a known license level
   cannot be determined.
@@ -87,3 +100,4 @@ bazelDependencies {
 [1]: https://bazel.build
 [2]: https://github.com/bazelbuild/bazel/blob/master/tools/build_defs/repo/java.bzl
 [3]: https://github.com/jk1/Gradle-License-Report
+[4]: https://github.com/bazelbuild/rules_jvm_external

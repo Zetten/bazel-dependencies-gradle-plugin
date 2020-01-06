@@ -31,8 +31,8 @@ class BazelDependenciesPlugin : Plugin<Project> {
 
             val configuration = bazelDependencies.configuration
             val projectDependencies = configuration.resolvedConfiguration.firstLevelModuleDependencies
-                    .flatMap { walkDependencies(it, project, bazelDependencies.sourcesChecksums) }
-                    .toHashSet()
+                .flatMap { walkDependencies(it, project, bazelDependencies.sourcesChecksums) }
+                .toHashSet()
 
             val licenseConfigData = ConfigurationReader(CachedModuleReader()).read(project, configuration)
             val dependencyLicenseData = HashMap<ProjectDependency, List<LicenseData>>()
@@ -40,14 +40,18 @@ class BazelDependenciesPlugin : Plugin<Project> {
             for (it in projectDependencies) {
                 val ld = ArrayList<LicenseData>()
                 if (bazelDependencies.licenseOverrides[it.getMavenIdentifier()] != null) {
-                    logger.debug("Overriding license for {} with {}", it.getMavenIdentifier(), bazelDependencies.licenseOverrides[it.getMavenIdentifier()])
+                    logger.debug(
+                        "Overriding license for {} with {}",
+                        it.getMavenIdentifier(),
+                        bazelDependencies.licenseOverrides[it.getMavenIdentifier()]
+                    )
                     ld.add(LicenseData(null, null, bazelDependencies.licenseOverrides[it.getMavenIdentifier()]))
                 } else {
                     logger.debug("Using real licenses for {}", it.getMavenIdentifier())
                     val licenses = licenseConfigData.dependencies
-                            .filter { d -> it.id.group == d.group && it.id.name == d.name && it.id.version == d.version }
-                            .flatMap { md -> md.poms }
-                            .flatMap { pom -> pom.licenses }
+                        .filter { d -> it.id.group == d.group && it.id.name == d.name && it.id.version == d.version }
+                        .flatMap { md -> md.poms }
+                        .flatMap { pom -> pom.licenses }
                     for (l in licenses) {
                         ld.add(LicenseData(l.name, l.url, null))
                     }
@@ -57,28 +61,43 @@ class BazelDependenciesPlugin : Plugin<Project> {
 
             bazelDependencies.outputFile.parentFile.mkdirs()
 
-            tasks.create("generateWorkspace", GenerateWorkspace::class) {
-                outputFile = bazelDependencies.outputFile
-                dependencies = projectDependencies
-                repositories = project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
-                licenseData = dependencyLicenseData
-                strictLicenses = bazelDependencies.strictLicenses
-                dependenciesAttr = bazelDependencies.dependenciesAttr
-                safeSources = bazelDependencies.safeSources
-            }
+            if (bazelDependencies.mode == BazelDependenciesMode.JVM_MAVEN_IMPORT_EXTERNAL)
+                tasks.create("generateWorkspace", GenerateJvmMavenImportExternal::class) {
+                    outputFile = bazelDependencies.outputFile
+                    dependencies = projectDependencies
+                    repositories =
+                        project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
+                    licenseData = dependencyLicenseData
+                    strictLicenses = bazelDependencies.strictLicenses
+                    dependenciesAttr = bazelDependencies.dependenciesAttr
+                    safeSources = bazelDependencies.safeSources
+                }
+            else
+                tasks.create("generateWorkspace", GenerateRulesJvmExternal::class) {
+                    outputFile = bazelDependencies.outputFile
+                    dependencies = projectDependencies
+                    repositories =
+                        project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
+                }
         }
     }
 
-    private fun walkDependencies(resolvedDependency: ResolvedDependency, project: Project, resolveSrcJars: Boolean): Iterable<ProjectDependency> {
-        val transitiveDeps = resolvedDependency.children.flatMap { walkDependencies(it, project, resolveSrcJars) }.toSet()
-        val firstOrderDeps = resolvedDependency.children.map { i -> transitiveDeps.first { j -> i.module.id == j.id } }.toSet()
+    private fun walkDependencies(
+        resolvedDependency: ResolvedDependency,
+        project: Project,
+        resolveSrcJars: Boolean
+    ): Iterable<ProjectDependency> {
+        val transitiveDeps =
+            resolvedDependency.children.flatMap { walkDependencies(it, project, resolveSrcJars) }.toSet()
+        val firstOrderDeps =
+            resolvedDependency.children.map { i -> transitiveDeps.first { j -> i.module.id == j.id } }.toSet()
 
         val dep = ProjectDependency(
-                id = resolvedDependency.module.id,
-                classifier = resolvedDependency.moduleArtifacts.first().classifier,
-                dependencies = firstOrderDeps,
-                jar = resolvedDependency.moduleArtifacts.first().file,
-                srcJar = if (resolveSrcJars) findSrcJar(resolvedDependency.module.id, project) else null
+            id = resolvedDependency.module.id,
+            classifier = resolvedDependency.moduleArtifacts.first().classifier,
+            dependencies = firstOrderDeps,
+            jar = resolvedDependency.moduleArtifacts.first().file,
+            srcJar = if (resolveSrcJars) findSrcJar(resolvedDependency.module.id, project) else null
         )
 
         return setOf(dep) + transitiveDeps
@@ -86,12 +105,12 @@ class BazelDependenciesPlugin : Plugin<Project> {
 
     private fun findSrcJar(id: ModuleVersionIdentifier, project: Project): File? {
         val sourcesArtifacts = project.dependencies.createArtifactResolutionQuery()
-                .forModule(id.group, id.name, id.version)
-                .withArtifacts(JvmLibrary::class, SourcesArtifact::class)
-                .execute()
-                .resolvedComponents
-                .flatMap { it.getArtifacts(SourcesArtifact::class) }
-                .toSet()
+            .forModule(id.group, id.name, id.version)
+            .withArtifacts(JvmLibrary::class, SourcesArtifact::class)
+            .execute()
+            .resolvedComponents
+            .flatMap { it.getArtifacts(SourcesArtifact::class) }
+            .toSet()
 
         if (sourcesArtifacts.size == 1) {
             return (sourcesArtifacts.first() as ResolvedArtifactResult).file
@@ -105,9 +124,15 @@ class BazelDependenciesPlugin : Plugin<Project> {
 open class BazelDependencies {
     lateinit var configuration: Configuration
     lateinit var outputFile: File
+    var mode: BazelDependenciesMode = BazelDependenciesMode.JVM_MAVEN_IMPORT_EXTERNAL
     var strictLicenses: Boolean = true
     var licenseOverrides: Map<String, String> = mapOf()
     var dependenciesAttr: String = "exports"
     var safeSources: Boolean = false
     var sourcesChecksums: Boolean = false
+}
+
+enum class BazelDependenciesMode {
+    JVM_MAVEN_IMPORT_EXTERNAL,
+    RULES_JVM_EXTERNAL
 }

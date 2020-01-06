@@ -13,7 +13,7 @@ import java.io.File
 import javax.inject.Inject
 
 @CacheableTask
-open class GenerateWorkspace @Inject constructor(private val workerExecutor: WorkerExecutor) : DefaultTask() {
+open class GenerateJvmMavenImportExternal @Inject constructor(private val workerExecutor: WorkerExecutor) : DefaultTask() {
 
     @Input
     lateinit var dependencies: Set<ProjectDependency>

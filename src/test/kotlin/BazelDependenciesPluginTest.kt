@@ -120,6 +120,39 @@ class BazelDependenciesPluginTest {
         assertThat(outputFile.readText(), equalTo(BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_non_strict.bzl").readText()))
     }
 
+    @Test
+    fun `simple rules_jvm_external attributes can be generated`() {
+        givenBuildScript("""
+            plugins {
+                base
+                id("com.github.zetten.bazel-dependencies-plugin")
+            }
+
+            repositories {
+                jcenter()
+            }
+
+            val generate by configurations.creating
+
+            dependencies {
+                generate("com.google.guava:guava:26.0-jre")
+                generate("dom4j:dom4j:1.6.1")
+            }
+
+            bazelDependencies {
+                configuration = generate
+                outputFile = project.buildDir.resolve("java_repositories.bzl")
+                mode = com.github.zetten.bazeldeps.BazelDependenciesMode.RULES_JVM_EXTERNAL
+            }
+        """.trimIndent())
+
+        build("generateWorkspace")
+
+        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
+        assertThat(outputFile.exists(), equalTo(true))
+        assertThat(outputFile.readText(), equalTo(BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl").readText()))
+    }
+
     private fun build(vararg arguments: String): BuildResult =
             GradleRunner
                     .create()

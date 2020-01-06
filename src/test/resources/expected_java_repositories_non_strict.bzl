@@ -103,7 +103,7 @@ def com_google_j2objc_j2objc_annotations(fetch_sources, replacements):
         server_urls = [
             "https://jcenter.bintray.com/",
         ],
-        artifact_sha256 = "40ceb7157feb263949e0f503fe5f71689333a621021aa20ce0d0acee3badaa0f",
+        artifact_sha256 = "2994a7eb78f2710bd3d3bfb639b2c94e219cedac0d4d084d516e78c16dddecf6",
         licenses = ["notice"],
         fetch_sources = fetch_sources,
         srcjar_sha256 = None,

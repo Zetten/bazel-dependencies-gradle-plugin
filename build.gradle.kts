@@ -1,11 +1,11 @@
 plugins {
     `java-gradle-plugin`
     `kotlin-dsl`
-    id("com.gradle.plugin-publish") version "0.10.0"
+    id("com.gradle.plugin-publish") version "0.10.1"
 }
 
 group = "com.github.zetten"
-version = "1.4.0"
+version = "1.5.0"
 
 description = """
 Generate Bazel Java dependency rules from Gradle project configuration
