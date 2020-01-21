@@ -153,6 +153,46 @@ class BazelDependenciesPluginTest {
         assertThat(outputFile.readText(), equalTo(BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl").readText()))
     }
 
+    @Test
+    fun `rules_jvm_external attributes can be configured`() {
+        givenBuildScript("""
+            plugins {
+                base
+                id("com.github.zetten.bazel-dependencies-plugin")
+            }
+
+            repositories {
+                jcenter()
+            }
+
+            val generate by configurations.creating
+
+            dependencies {
+                generate("com.google.guava:guava:26.0-jre")
+                generate("dom4j:dom4j:1.6.1")
+                generate("junit:junit:4.12")
+            }
+
+            bazelDependencies {
+                configuration = generate
+                outputFile = project.buildDir.resolve("java_repositories.bzl")
+                mode = com.github.zetten.bazeldeps.BazelDependenciesMode.RULES_JVM_EXTERNAL
+                compileOnly = setOf(
+                    "com.google.errorprone:error_prone_annotations:2.1.3",
+                    "com.google.j2objc:j2objc-annotations:1.1",
+                    "org.codehaus.mojo:animal-sniffer-annotations:1.14"
+                )
+                testOnly = setOf("junit:junit:4.12")
+            }
+        """.trimIndent())
+
+        build("generateWorkspace")
+
+        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
+        assertThat(outputFile.exists(), equalTo(true))
+        assertThat(outputFile.readText(), equalTo(BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external_configured.bzl").readText()))
+    }
+
     private fun build(vararg arguments: String): BuildResult =
             GradleRunner
                     .create()

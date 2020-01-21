@@ -67,6 +67,16 @@ applicable licenses, and emit a file which can be loaded in a Bazel WORKSPACE.
   down the generation, as Gradle resolves the source jars independently of the
   artifacts, but allows safer usage of `fetch_sources = True` (and reduces
   Bazel's noisy logging of sha256 values which were not provided in the rules).
+* `compileOnly` (default empty set): A `Set<String>` of artifact identifiers
+  for which the Bazel targets should be marked `neverlink = True`, i.e.
+  available only on the compilation classpath, and not at runtime. Currently
+  only functional with mode `RULES_JVM_EXTERNAL`.
+* `testOnly` (default empty set): A `Set<String>` of artifact identifiers
+  for which the Bazel targets should be marked `testonly = True`, i.e.
+  available only to targets which are themselves `testonly`, for example to
+  avoid leaking test libraries into production artifacts. Currently only
+  functional with mode `RULES_JVM_EXTERNAL`, and the `testonly` attribute is
+  only supported by rules_jvm_external &gt; 3.1.
 
 ## Example (kotlin-dsl)
 

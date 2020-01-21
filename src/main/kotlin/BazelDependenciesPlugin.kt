@@ -31,37 +31,37 @@ class BazelDependenciesPlugin : Plugin<Project> {
 
             val configuration = bazelDependencies.configuration
             val projectDependencies = configuration.resolvedConfiguration.firstLevelModuleDependencies
-                .flatMap { walkDependencies(it, project, bazelDependencies.sourcesChecksums) }
+                .flatMap { walkDependencies(it, project, bazelDependencies.sourcesChecksums, bazelDependencies.compileOnly, bazelDependencies.testOnly) }
                 .toHashSet()
-
-            val licenseConfigData = ConfigurationReader(CachedModuleReader()).read(project, configuration)
-            val dependencyLicenseData = HashMap<ProjectDependency, List<LicenseData>>()
-
-            for (it in projectDependencies) {
-                val ld = ArrayList<LicenseData>()
-                if (bazelDependencies.licenseOverrides[it.getMavenIdentifier()] != null) {
-                    logger.debug(
-                        "Overriding license for {} with {}",
-                        it.getMavenIdentifier(),
-                        bazelDependencies.licenseOverrides[it.getMavenIdentifier()]
-                    )
-                    ld.add(LicenseData(null, null, bazelDependencies.licenseOverrides[it.getMavenIdentifier()]))
-                } else {
-                    logger.debug("Using real licenses for {}", it.getMavenIdentifier())
-                    val licenses = licenseConfigData.dependencies
-                        .filter { d -> it.id.group == d.group && it.id.name == d.name && it.id.version == d.version }
-                        .flatMap { md -> md.poms }
-                        .flatMap { pom -> pom.licenses }
-                    for (l in licenses) {
-                        ld.add(LicenseData(l.name, l.url, null))
-                    }
-                }
-                dependencyLicenseData[it] = ld
-            }
 
             bazelDependencies.outputFile.parentFile.mkdirs()
 
-            if (bazelDependencies.mode == BazelDependenciesMode.JVM_MAVEN_IMPORT_EXTERNAL)
+            if (bazelDependencies.mode == BazelDependenciesMode.JVM_MAVEN_IMPORT_EXTERNAL) {
+                val licenseConfigData = ConfigurationReader(CachedModuleReader()).read(project, configuration)
+                val dependencyLicenseData = HashMap<ProjectDependency, List<LicenseData>>()
+
+                for (it in projectDependencies) {
+                    val ld = ArrayList<LicenseData>()
+                    if (bazelDependencies.licenseOverrides[it.getMavenIdentifier()] != null) {
+                        logger.debug(
+                            "Overriding license for {} with {}",
+                            it.getMavenIdentifier(),
+                            bazelDependencies.licenseOverrides[it.getMavenIdentifier()]
+                        )
+                        ld.add(LicenseData(null, null, bazelDependencies.licenseOverrides[it.getMavenIdentifier()]))
+                    } else {
+                        logger.debug("Using real licenses for {}", it.getMavenIdentifier())
+                        val licenses = licenseConfigData.dependencies
+                            .filter { d -> it.id.group == d.group && it.id.name == d.name && it.id.version == d.version }
+                            .flatMap { md -> md.poms }
+                            .flatMap { pom -> pom.licenses }
+                        for (l in licenses) {
+                            ld.add(LicenseData(l.name, l.url, null))
+                        }
+                    }
+                    dependencyLicenseData[it] = ld
+                }
+
                 tasks.create("generateWorkspace", GenerateJvmMavenImportExternal::class) {
                     outputFile = bazelDependencies.outputFile
                     dependencies = projectDependencies
@@ -72,32 +72,41 @@ class BazelDependenciesPlugin : Plugin<Project> {
                     dependenciesAttr = bazelDependencies.dependenciesAttr
                     safeSources = bazelDependencies.safeSources
                 }
-            else
+            } else {
                 tasks.create("generateWorkspace", GenerateRulesJvmExternal::class) {
                     outputFile = bazelDependencies.outputFile
                     dependencies = projectDependencies
                     repositories =
                         project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
                 }
+            }
         }
     }
 
     private fun walkDependencies(
         resolvedDependency: ResolvedDependency,
         project: Project,
-        resolveSrcJars: Boolean
+        resolveSrcJars: Boolean,
+        compileOnly: Set<String>,
+        testOnly: Set<String>
     ): Iterable<ProjectDependency> {
         val transitiveDeps =
-            resolvedDependency.children.flatMap { walkDependencies(it, project, resolveSrcJars) }.toSet()
+            resolvedDependency.children.flatMap { walkDependencies(it, project, resolveSrcJars, compileOnly, testOnly) }.toSet()
         val firstOrderDeps =
             resolvedDependency.children.map { i -> transitiveDeps.first { j -> i.module.id == j.id } }.toSet()
 
+        val id = resolvedDependency.module.id
+        val classifier = resolvedDependency.moduleArtifacts.first().classifier
+        val jar = resolvedDependency.moduleArtifacts.first().file
+
         val dep = ProjectDependency(
-            id = resolvedDependency.module.id,
-            classifier = resolvedDependency.moduleArtifacts.first().classifier,
+            id = id,
+            classifier = classifier,
             dependencies = firstOrderDeps,
-            jar = resolvedDependency.moduleArtifacts.first().file,
-            srcJar = if (resolveSrcJars) findSrcJar(resolvedDependency.module.id, project) else null
+            jar = jar,
+            srcJar = if (resolveSrcJars) findSrcJar(id, project) else null,
+            neverlink = compileOnly.contains(if (classifier != null) { "$id:$classifier" } else { id.toString() }),
+            testonly = testOnly.contains(if (classifier != null) { "$id:$classifier" } else { id.toString() })
         )
 
         return setOf(dep) + transitiveDeps
@@ -127,6 +136,8 @@ open class BazelDependencies {
     var mode: BazelDependenciesMode = BazelDependenciesMode.JVM_MAVEN_IMPORT_EXTERNAL
     var strictLicenses: Boolean = true
     var licenseOverrides: Map<String, String> = mapOf()
+    var compileOnly: Set<String> = setOf()
+    var testOnly: Set<String> = setOf()
     var dependenciesAttr: String = "exports"
     var safeSources: Boolean = false
     var sourcesChecksums: Boolean = false

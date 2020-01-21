@@ -5,11 +5,15 @@ import java.io.File
 import java.io.Serializable
 
 data class ProjectDependency(
-        val id: ModuleVersionIdentifier,
-        val classifier: String?,
-        val dependencies: Set<ProjectDependency>,
-        val jar: File? = null,
-        val srcJar: File? = null
+    val id: ModuleVersionIdentifier,
+    val classifier: String?,
+    val dependencies: Set<ProjectDependency>,
+    val jar: File? = null,
+    val srcJar: File? = null,
+    val overrideLicenseTypes: List<String>? = null,
+    val exclusions: List<String>? = null,
+    val neverlink: Boolean = false,
+    val testonly: Boolean = false
 ) : Comparable<ProjectDependency>, Serializable {
 
     fun getBazelIdentifier(): String {
