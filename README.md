@@ -47,6 +47,12 @@ applicable licenses, and emit a file which can be loaded in a Bazel WORKSPACE.
   artifacts. `RULES_JVM_EXTERNAL` will emit `REPOSITORIES` and `ARTIFACTS`
   attributes which can be imported and passed to `maven_install` from
   [rules_jvm_external][4].
+* `createMavenInstallJson` (*Experimental*, default `False`): A `Boolean` only
+  effective in `RULES_JVM_EXTERNAL` mode, to cause `generateWorkspace` to
+  create a `maven_install.json` file alongside the `java_repositories.bzl`
+  file. This JSON file is intended to be usable with the `maven_install_json`
+  attribute of `maven_install` from [rules_jvm_external][4], for faster and
+  cacheable resolution of Maven dependencies.
 * `strictLicenses` (default `True`): A `Boolean` to control whether
   `generateWorkspace` should fail in the event that a known license level
   cannot be determined.
@@ -67,6 +73,8 @@ applicable licenses, and emit a file which can be loaded in a Bazel WORKSPACE.
   down the generation, as Gradle resolves the source jars independently of the
   artifacts, but allows safer usage of `fetch_sources = True` (and reduces
   Bazel's noisy logging of sha256 values which were not provided in the rules).
+  In `RULES_JVM_EXTERNAL` mode with `createMavenInstallJson=true`, this
+  attribute triggers generation of JSON entries for the sources artifacts.
 * `compileOnly` (default empty set): A `Set<String>` of artifact identifiers
   for which the Bazel targets should be marked `neverlink = True`, i.e.
   available only on the compilation classpath, and not at runtime. Currently

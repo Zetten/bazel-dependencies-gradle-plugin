@@ -75,6 +75,8 @@ class BazelDependenciesPlugin : Plugin<Project> {
             } else {
                 tasks.create("generateWorkspace", GenerateRulesJvmExternal::class) {
                     outputFile = bazelDependencies.outputFile
+                    createMavenInstallJson = bazelDependencies.createMavenInstallJson
+                    mavenInstallJsonFile = bazelDependencies.outputFile.resolveSibling("maven_install.json")
                     dependencies = projectDependencies
                     repositories =
                         project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
@@ -103,6 +105,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
             id = id,
             classifier = classifier,
             dependencies = firstOrderDeps,
+            allDependencies = transitiveDeps,
             jar = jar,
             srcJar = if (resolveSrcJars) findSrcJar(id, project) else null,
             neverlink = compileOnly.contains(if (classifier != null) { "$id:$classifier" } else { id.toString() }),
@@ -141,6 +144,7 @@ open class BazelDependencies {
     var dependenciesAttr: String = "exports"
     var safeSources: Boolean = false
     var sourcesChecksums: Boolean = false
+    var createMavenInstallJson: Boolean = false
 }
 
 enum class BazelDependenciesMode {

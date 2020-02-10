@@ -1,13 +1,20 @@
 package com.github.zetten.bazeldeps
 
 import org.gradle.api.artifacts.ModuleVersionIdentifier
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.Serializable
+import java.net.HttpURLConnection
+import java.net.URL
+
+private val logger: Logger = LoggerFactory.getLogger(ProjectDependency::class.java)
 
 data class ProjectDependency(
     val id: ModuleVersionIdentifier,
     val classifier: String?,
     val dependencies: Set<ProjectDependency>,
+    val allDependencies: Set<ProjectDependency>,
     val jar: File? = null,
     val srcJar: File? = null,
     val overrideLicenseTypes: List<String>? = null,
@@ -86,4 +93,36 @@ data class ProjectDependency(
         return result
     }
 
+    fun findArtifactUrls(repositories: List<String> = emptyList()): List<String> {
+        return repositories.mapNotNull {
+            val artifactUrl = "${getArtifactUrl(getMavenIdentifier(), it)}.${jar!!.extension}"
+            val code = with(URL(artifactUrl).openConnection() as HttpURLConnection) {
+                requestMethod = "HEAD"
+                connect()
+                responseCode
+            }
+            logger.debug("Received ${code} for artifact at ${artifactUrl}")
+            if (code in 100..399) artifactUrl else null
+        }
+    }
+
+    private fun getArtifactUrl(mavenIdentifier: String, repoUrl: String): String {
+        val parts = mavenIdentifier.split(':')
+
+        val (group, artifact, version, file_version) = if (parts.size == 4) {
+            val (group, artifact, version, classifier) = parts
+            val fileVersion = "${version}-${classifier}"
+            arrayOf(group, artifact, version, fileVersion)
+        } else {
+            val (group, artifact, version) = parts
+            arrayOf(group, artifact, version, version)
+        }
+
+        return (if (repoUrl.endsWith('/')) repoUrl else "$repoUrl/") + arrayOf(
+            group.replace('.', '/'),
+            artifact,
+            version,
+            "${artifact}-${file_version}"
+        ).joinToString("/")
+    }
 }

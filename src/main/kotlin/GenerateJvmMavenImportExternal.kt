@@ -33,6 +33,7 @@ open class GenerateJvmMavenImportExternal @Inject constructor(private val worker
     @Input
     var safeSources: Boolean = false
 
+
     @OutputFile
     lateinit var outputFile: File
 
