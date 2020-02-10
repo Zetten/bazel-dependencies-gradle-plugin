@@ -136,8 +136,8 @@ private fun computeDependencyTree(
                     it, it.copy(
                         classifier = "sources",
                         jar = it.srcJar,
-                        dependencies = emptySet(),
-                        allDependencies = emptySet()
+                        dependencies = it.dependencies.map { it.copy(classifier="sources") }.toSet(),
+                        allDependencies = it.allDependencies.map { it.copy(classifier="sources") }.toSet()
                     )
                 )
             } else {
@@ -154,8 +154,8 @@ private fun computeDependencyTree(
                 dependencies = dep.allDependencies.map { it.getJvmMavenImportExternalCoordinates() }.sorted(),
                 url = urls.first(),
                 mirrorUrls = urls,
-                sha256 = HashUtil.sha256(dep.jar).asZeroPaddedHexString(64)
-                // TODO does rules_jvm_external require a calculated file attribute?
+                sha256 = HashUtil.sha256(dep.jar).asZeroPaddedHexString(64),
+                file = "v1/${urls.first().replace("://", "/")}"
             )
         }
         .collectSortedList(compareBy { it.coord })
