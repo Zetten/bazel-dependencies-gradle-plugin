@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "com.github.zetten"
-version = "1.7.1"
+version = "1.7.2"
 
 description = """
 Generate Bazel Java dependency rules from Gradle project configuration

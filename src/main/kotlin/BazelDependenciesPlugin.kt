@@ -31,6 +31,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
 
             val configuration = bazelDependencies.configuration
             val projectDependencies = configuration.resolvedConfiguration.firstLevelModuleDependencies
+                .filter { it.moduleArtifacts.isNotEmpty() }
                 .flatMap { walkDependencies(it, project, bazelDependencies.sourcesChecksums, bazelDependencies.compileOnly, bazelDependencies.testOnly) }
                 .toHashSet()
 

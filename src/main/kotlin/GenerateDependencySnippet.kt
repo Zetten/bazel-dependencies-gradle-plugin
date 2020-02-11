@@ -28,8 +28,8 @@ class GenerateDependencySnippet @Inject constructor(
             "none"
         }
 
-        val jarSha256 = HashUtil.sha256(dependency.jar).asZeroPaddedHexString(64)
-        val jarUrls = findArtifactRepositories(dependency.getMavenIdentifier(), dependency.jar!!.extension)
+        val jarSha256 = HashUtil.sha256(dependency.jar!!).asZeroPaddedHexString(64)
+        val jarUrls = findArtifactRepositories(dependency.getMavenIdentifier(), dependency.jar.extension)
         val srcjarSha256 = if (dependency.srcJar != null) "\"${HashUtil.sha256(dependency.srcJar).asZeroPaddedHexString(64)}\"" else "None"
 
         outputFile.writeText("""
