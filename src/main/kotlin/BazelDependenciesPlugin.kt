@@ -93,10 +93,11 @@ class BazelDependenciesPlugin : Plugin<Project> {
         compileOnly: Set<String>,
         testOnly: Set<String>
     ): Iterable<ProjectDependency> {
+        val dependenciesWithArtifacts = resolvedDependency.children.filter { it.moduleArtifacts.isNotEmpty() }
         val transitiveDeps =
-            resolvedDependency.children.flatMap { walkDependencies(it, project, resolveSrcJars, compileOnly, testOnly) }.toSet()
+            dependenciesWithArtifacts.flatMap { walkDependencies(it, project, resolveSrcJars, compileOnly, testOnly) }.toSet()
         val firstOrderDeps =
-            resolvedDependency.children.map { i -> transitiveDeps.first { j -> i.module.id == j.id } }.toSet()
+            dependenciesWithArtifacts.map { i -> transitiveDeps.first { j -> i.module.id == j.id } }.toSet()
 
         val id = resolvedDependency.module.id
         val classifier = resolvedDependency.moduleArtifacts.first().classifier
