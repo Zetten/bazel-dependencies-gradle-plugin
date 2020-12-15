@@ -5,11 +5,17 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
 import org.gradle.api.DefaultTask
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.SetProperty
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.gradle.internal.hash.HashUtil
+import org.gradle.kotlin.dsl.listProperty
+import org.gradle.kotlin.dsl.property
+import org.gradle.kotlin.dsl.setProperty
 import reactor.core.publisher.Flux
 import reactor.core.scheduler.Schedulers
 import reactor.kotlin.core.publisher.toFlux
@@ -19,28 +25,30 @@ import java.io.File
 open class GenerateRulesJvmExternal : DefaultTask() {
 
     @Input
-    lateinit var dependencies: Set<ProjectDependency>
+    val dependencies: SetProperty<ProjectDependency> = project.objects.setProperty<ProjectDependency>()
 
     @Input
-    lateinit var repositories: List<String>
+    val repositories: ListProperty<String> = project.objects.listProperty<String>()
 
     @Input
-    var createMavenInstallJson: Boolean = false
+    val createMavenInstallJson: Property<Boolean> = project.objects.property<Boolean>().convention(false)
 
     @OutputFile
-    lateinit var outputFile: File
+    val outputFile: Property<File>  = project.objects.property()
 
     @OutputFile
-    lateinit var mavenInstallJsonFile: File
+    val mavenInstallJsonFile: Property<File> = project.objects.property()
 
     @TaskAction
     fun generateWorkspace() {
-        logger.info("Generating Bazel rules_jvm_external attributes for {} dependencies", dependencies.size)
+        logger.warn("Generating Bazel rules_jvm_external attributes for {} dependencies", dependencies.get().size)
 
-        val sortedRepositories = repositories.sorted()
-        val sortedDependencies = dependencies.sorted()
+        outputFile.get().parentFile.mkdirs()
 
-        outputFile.writeText(
+        val sortedRepositories = repositories.get().sorted()
+        val sortedDependencies = dependencies.get().sorted()
+
+        outputFile.get().writeText(
             """
             |load("@rules_jvm_external//:specs.bzl", "maven")
             |
@@ -54,8 +62,8 @@ open class GenerateRulesJvmExternal : DefaultTask() {
             |""".trimMargin()
         )
 
-        if (createMavenInstallJson) {
-            mavenInstallJsonFile.writeText(
+        if (createMavenInstallJson.get()) {
+            mavenInstallJsonFile.get().writeText(
                 Json(JsonConfiguration.Stable.copy(prettyPrint = true)).stringify(
                     MavenInstallJson.serializer(),
                     MavenInstallJson(
@@ -163,7 +171,7 @@ private fun computeDependencyTree(
         .block()!!
 
 // Implementation of https://github.com/bazelbuild/rules_jvm_external/blob/030ea9ef8e4ea491fed13de1771e225eb5a52d18/coursier.bzl#L120
-private fun computeDependencyTreeSignature(dependencies: List<DependencyTreeEntry>): Int {
+internal fun computeDependencyTreeSignature(dependencies: List<DependencyTreeEntry>): Int {
     val signatureInputs: List<String> = dependencies.map { dep ->
         var uniq = arrayOf(dep.coord)
         if (dep.file != null) {

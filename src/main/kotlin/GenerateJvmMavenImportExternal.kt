@@ -2,10 +2,19 @@ package com.github.zetten.bazeldeps
 
 import org.gradle.api.Action
 import org.gradle.api.DefaultTask
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
+import org.gradle.api.provider.SetProperty
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
+import org.gradle.kotlin.dsl.listProperty
+import org.gradle.kotlin.dsl.mapProperty
+import org.gradle.kotlin.dsl.property
+import org.gradle.kotlin.dsl.setProperty
 import org.gradle.workers.IsolationMode
 import org.gradle.workers.WorkerConfiguration
 import org.gradle.workers.WorkerExecutor
@@ -16,32 +25,35 @@ import javax.inject.Inject
 open class GenerateJvmMavenImportExternal @Inject constructor(private val workerExecutor: WorkerExecutor) : DefaultTask() {
 
     @Input
-    lateinit var dependencies: Set<ProjectDependency>
+    val dependencies: SetProperty<ProjectDependency> = project.objects.setProperty()
 
     @Input
-    lateinit var repositories: List<String>
+    val repositories: ListProperty<String> = project.objects.listProperty()
 
     @Input
-    lateinit var licenseData: Map<ProjectDependency, List<LicenseData>>
+    val licenseData: MapProperty<ProjectDependency, List<LicenseData>> = project.objects.mapProperty()
 
     @Input
-    var strictLicenses: Boolean = true
+    val strictLicenses: Property<Boolean> = project.objects.property<Boolean>().convention(true)
 
     @Input
-    lateinit var dependenciesAttr: String
+    val dependenciesAttr: Property<String> = project.objects.property()
 
     @Input
-    var safeSources: Boolean = false
+    val safeSources: Property<Boolean> = project.objects.property<Boolean>().convention(false)
 
 
     @OutputFile
-    lateinit var outputFile: File
+    val outputFile: Property<File> = project.objects.property()
 
     @TaskAction
     fun generateWorkspace() {
-        logger.info("Generating Bazel repository rules for {} dependencies", dependencies.size)
+        logger.warn("Generating Bazel repository rules for {} dependencies", dependencies.get().size)
 
-        val sortedDependencies = dependencies.sorted()
+        val output = outputFile.get()
+        output.parentFile.mkdirs()
+
+        val sortedDependencies = dependencies.get().sorted()
 
         val snippetFiles = sortedDependencies.map {
             val snippetFile = temporaryDir.resolve("${it.getBazelIdentifier()}.snippet")
@@ -51,18 +63,18 @@ open class GenerateJvmMavenImportExternal @Inject constructor(private val worker
                     config.params(
                             snippetFile,
                             it,
-                            repositories,
-                            licenseData[it],
-                            strictLicenses,
-                            dependenciesAttr,
-                            safeSources
+                            repositories.get(),
+                            licenseData.get()[it],
+                            strictLicenses.get(),
+                            dependenciesAttr.get(),
+                            safeSources.get()
                     )
                 }
             })
             snippetFile
         }
 
-        outputFile.writeText("""
+        output.writeText("""
             |load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
             |
             |def _replace_dependencies(dependencies, replacements):
@@ -77,25 +89,25 @@ open class GenerateJvmMavenImportExternal @Inject constructor(private val worker
             |def java_repositories(
             |""".trimMargin())
         sortedDependencies.forEach {
-            outputFile.appendText("        omit_${it.getBazelIdentifier()} = False,\n")
+            output.appendText("        omit_${it.getBazelIdentifier()} = False,\n")
         }
-        outputFile.appendText("""
+        output.appendText("""
             |        fetch_sources = False,
             |        replacements = {}):
             |""".trimMargin())
         sortedDependencies.forEach {
-            outputFile.appendText("    if not omit_${it.getBazelIdentifier()}:\n        ${it.getBazelIdentifier()}(fetch_sources, replacements)\n")
+            output.appendText("    if not omit_${it.getBazelIdentifier()}:\n        ${it.getBazelIdentifier()}(fetch_sources, replacements)\n")
         }
-        outputFile.appendText("\n")
+        output.appendText("\n")
 
         workerExecutor.await()
 
         if (snippetFiles.isEmpty()) {
-            outputFile.appendText("    pass\n")
+            output.appendText("    pass\n")
         } else {
             snippetFiles.sorted().forEachIndexed { idx, it ->
-                outputFile.appendBytes(it.readBytes())
-                if (idx != snippetFiles.lastIndex) outputFile.appendText("\n")
+                output.appendBytes(it.readBytes())
+                if (idx != snippetFiles.lastIndex) output.appendText("\n")
             }
         }
     }
