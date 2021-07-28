@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
+import kotlinx.serialization.json.*
 import org.gradle.api.DefaultTask
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
@@ -64,14 +65,11 @@ open class GenerateRulesJvmExternal : DefaultTask() {
 
         if (createMavenInstallJson.get()) {
             mavenInstallJsonFile.get().writeText(
-                Json(JsonConfiguration.Stable.copy(prettyPrint = true)).stringify(
-                    MavenInstallJson.serializer(),
-                    MavenInstallJson(
-                        dependencyTree = DependencyTree(
-                            computeDependencyTree(sortedDependencies, sortedRepositories)
-                        )
+                MavenInstallJson(
+                    dependencyTree = DependencyTree(
+                        computeDependencyTree(sortedDependencies, sortedRepositories)
                     )
-                )
+                ).toJson()
             )
         }
     }
@@ -97,7 +95,25 @@ open class GenerateRulesJvmExternal : DefaultTask() {
 data class MavenInstallJson(
     @SerialName("dependency_tree")
     val dependencyTree: DependencyTree
-)
+    ) {
+
+    fun toJson(): String {
+        val json = Json(JsonConfiguration.Stable.copy(prettyPrint = true))
+        val jsonObject = normalize(json.toJson(MavenInstallJson.serializer(), this))
+
+        return json.stringify(JsonElement.serializer(), normalize(jsonObject))
+    }
+
+    private fun normalize(elem: JsonElement): JsonElement {
+        return when (elem) {
+            is JsonObject -> JsonObject(
+                elem.content.map { it.key to normalize(it.value) }.sortedBy { it.first }.toMap()
+            )
+            is JsonArray -> JsonArray(elem.content.map { normalize(it) })
+            else -> elem
+        }
+    }
+}
 
 @Serializable
 data class DependencyTree(

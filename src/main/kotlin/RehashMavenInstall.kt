@@ -2,7 +2,6 @@ package com.github.zetten.bazeldeps
 
 import kotlinx.serialization.UnstableDefault
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonConfiguration
 import org.gradle.api.DefaultTask
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.CacheableTask
@@ -29,14 +28,11 @@ open class RehashMavenInstall : DefaultTask() {
         val mavenInstall = Json.parse(MavenInstallJson.serializer(), target.readText())
 
         target.writeText(
-            Json(JsonConfiguration.Stable.copy(prettyPrint = true)).stringify(
-                MavenInstallJson.serializer(),
-                mavenInstall.copy(
-                    dependencyTree = mavenInstall.dependencyTree.copy(
-                        dependencyTreeSignature = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
-                    )
+            mavenInstall.copy(
+                dependencyTree = mavenInstall.dependencyTree.copy(
+                    dependencyTreeSignature = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
                 )
-            )
+            ).toJson()
         )
     }
 }
