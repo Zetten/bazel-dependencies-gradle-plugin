@@ -236,7 +236,7 @@ internal fun computeDependencyTreeSignature(dependencies: List<DependencyTreeEnt
         }
         uniq.joinToString(":")
     }
-    val signatureString = "[${signatureInputs.joinToString(", ") { "\"$it\"" }}]"
+    val signatureString = "[${signatureInputs.sorted().joinToString(", ") { "\"$it\"" }}]"
     return signatureString.hashCode()
 }
 
