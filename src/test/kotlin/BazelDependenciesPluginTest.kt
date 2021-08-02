@@ -1,22 +1,25 @@
+package com.github.zetten.bazeldeps
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.common.truth.Truth.assertThat
 import org.gradle.testkit.runner.BuildResult
 import org.gradle.testkit.runner.GradleRunner
-import org.hamcrest.CoreMatchers.equalTo
-import org.junit.Assert.assertThat
-import org.junit.Rule
-import org.junit.Test
-import org.junit.rules.ExpectedException
-import org.junit.rules.TemporaryFolder
+import org.gradle.testkit.runner.UnexpectedBuildFailure
+import org.junit.jupiter.api.Assertions.fail
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
-class BazelDependenciesPluginTest {
+internal class BazelDependenciesPluginTest {
 
-    @Rule
+    val objectMapper = ObjectMapper()
+
+    @TempDir
     @JvmField
-    var ex: ExpectedException = ExpectedException.none()
-
-    @Rule
-    @JvmField
-    val temporaryFolder = TemporaryFolder()
+    var temporaryFolder: Path? = null
 
     @Test
     fun `strict license resolution causes an error`() {
@@ -46,8 +49,12 @@ class BazelDependenciesPluginTest {
         """.trimIndent()
         )
 
-        ex.expectMessage("Could not determine a license for dom4j:dom4j:1.6.1")
-        build("generateJvmMavenImportExternal").output.trimEnd()
+        try {
+            build("generateJvmMavenImportExternal").output.trimEnd()
+            fail("Expected UnexpectedBuildFailure")
+        } catch (e: UnexpectedBuildFailure) {
+            assertThat(e).hasMessageThat().contains("Could not determine a license for dom4j:dom4j:1.6.1")
+        }
     }
 
     @Test
@@ -85,14 +92,11 @@ class BazelDependenciesPluginTest {
 
         build("generateJvmMavenImportExternal")
 
-        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
-        assertThat(outputFile.exists(), equalTo(true))
-        assertThat(
-            outputFile.readText(),
-            equalTo(
-                BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_license_overrides.bzl")
-                    .readText()
-            )
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_license_overrides.bzl")!!
+                .readText()
         )
     }
 
@@ -127,14 +131,11 @@ class BazelDependenciesPluginTest {
 
         build("generateJvmMavenImportExternal")
 
-        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
-        assertThat(outputFile.exists(), equalTo(true))
-        assertThat(
-            outputFile.readText(),
-            equalTo(
-                BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_non_strict.bzl")
-                    .readText()
-            )
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_non_strict.bzl")!!
+                .readText()
         )
     }
 
@@ -161,20 +162,18 @@ class BazelDependenciesPluginTest {
             bazelDependencies {
                 configuration.set(generate)
                 outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
+                createMavenInstallJson.set(false)
             }
         """.trimIndent()
         )
 
         build("generateRulesJvmExternal")
 
-        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
-        assertThat(outputFile.exists(), equalTo(true))
-        assertThat(
-            outputFile.readText(),
-            equalTo(
-                BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")
-                    .readText()
-            )
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")!!
+                .readText()
         )
     }
 
@@ -202,6 +201,7 @@ class BazelDependenciesPluginTest {
             bazelDependencies {
                 configuration.set(generate)
                 outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
+                createMavenInstallJson.set(false)
                 compileOnly.set(setOf(
                     "com.google.errorprone:error_prone_annotations:2.1.3",
                     "com.google.j2objc:j2objc-annotations:1.1",
@@ -214,19 +214,16 @@ class BazelDependenciesPluginTest {
 
         build("generateRulesJvmExternal")
 
-        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
-        assertThat(outputFile.exists(), equalTo(true))
-        assertThat(
-            outputFile.readText(),
-            equalTo(
-                BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external_configured.bzl")
-                    .readText()
-            )
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external_configured.bzl")!!
+                .readText()
         )
     }
 
     @Test
-    fun `rules_jvm_external dependencies may be pinned`() {
+    fun `rules_jvm_external dependencies are pinned by default`() {
         givenBuildScript(
             """
             plugins {
@@ -248,27 +245,69 @@ class BazelDependenciesPluginTest {
             bazelDependencies {
                 configuration.set(generate)
                 outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
-                createMavenInstallJson.set(true)
             }
         """.trimIndent()
         )
 
         build("generateRulesJvmExternal")
 
-        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
-        assertThat(outputFile.exists(), equalTo(true))
-        assertThat(
-            outputFile.readText(),
-            equalTo(
-                BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")!!
+                .readText()
+        )
+        val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install.json")!!
                     .readText()
             )
         )
-        val mavenInstall = temporaryFolder.root.resolve("build/maven_install.json")
-        assertThat(mavenInstall.exists(), equalTo(true))
-        assertThat(
-            mavenInstall.readText(),
-            equalTo(BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install.json").readText())
+    }
+
+    @Test
+    fun `rules_jvm_external new-format maven_install is supported`() {
+        givenBuildScript(
+            """
+            plugins {
+                base
+                id("com.github.zetten.bazel-dependencies-plugin")
+            }
+
+            repositories {
+                jcenter()
+            }
+
+            val generate by configurations.creating
+
+            dependencies {
+                generate("com.google.guava:guava:26.0-jre")
+                generate("dom4j:dom4j:1.6.1")
+            }
+
+            bazelDependencies {
+                configuration.set(generate)
+                outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
+                rulesJvmExternalVersion.set("4.1.0")
+            }
+        """.trimIndent()
+        )
+
+        build("generateRulesJvmExternal")
+
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")!!
+                .readText()
+        )
+        val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install_new_format.json")!!
+                    .readText()
+            )
         )
     }
 
@@ -295,33 +334,30 @@ class BazelDependenciesPluginTest {
             bazelDependencies {
                 configuration.set(generate)
                 outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
-                createMavenInstallJson.set(true)
             }
         """.trimIndent()
         )
 
         build("generateRulesJvmExternal")
 
-        val outputFile = temporaryFolder.root.resolve("build/java_repositories.bzl")
-        assertThat(outputFile.exists(), equalTo(true))
-        assertThat(
-            outputFile.readText(),
-            equalTo(
-                BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")!!
+                .readText()
+        )
+        val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install.json")!!
                     .readText()
             )
         )
-        val mavenInstall = temporaryFolder.root.resolve("build/maven_install.json")
-        assertThat(mavenInstall.exists(), equalTo(true))
-        assertThat(
-            mavenInstall.readText(),
-            equalTo(BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install.json").readText())
-        )
 
         mavenInstall.resolveSibling(".maven_install.json.tmp").let { tmpMavenInstall ->
-            tmpMavenInstall.bufferedWriter().use { writer ->
+            Files.newBufferedWriter(tmpMavenInstall).use { writer ->
                 var first = true
-                mavenInstall.forEachLine { line ->
+                mavenInstall.toFile().forEachLine { line ->
                     if (first) {
                         first = false
                     } else {
@@ -330,15 +366,87 @@ class BazelDependenciesPluginTest {
                     writer.write(line.replace(Regex("https(:/)?/jcenter.bintray.com/")) { "http${it.groupValues[1]}/customrepo.example.com/context/" })
                 }
             }
-            tmpMavenInstall.copyTo(mavenInstall, true)
-            tmpMavenInstall.delete()
+            Files.copy(tmpMavenInstall, mavenInstall, StandardCopyOption.REPLACE_EXISTING)
+            Files.delete(tmpMavenInstall)
         }
 
         build("rehashMavenInstall")
-        assertThat(mavenInstall.exists(), equalTo(true))
-        assertThat(
-            mavenInstall.readText(),
-            equalTo(BazelDependenciesPluginTest::class.java.getResource("/rehashed_maven_install.json").readText())
+        assertThat(Files.exists(mavenInstall)).isTrue()
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/rehashed_maven_install.json")!!
+                    .readText()
+            )
+        )
+    }
+
+    @Test
+    fun `rules_jvm_external new-format maven_install may be rehashed`() {
+        givenBuildScript(
+            """
+            plugins {
+                base
+                id("com.github.zetten.bazel-dependencies-plugin")
+            }
+
+            repositories {
+                jcenter()
+            }
+
+            val generate by configurations.creating
+
+            dependencies {
+                generate("com.google.guava:guava:26.0-jre")
+                generate("dom4j:dom4j:1.6.1")
+            }
+
+            bazelDependencies {
+                configuration.set(generate)
+                outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
+                rulesJvmExternalVersion.set("4.1.0")
+            }
+        """.trimIndent()
+        )
+
+        build("generateRulesJvmExternal")
+
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")!!
+                .readText()
+        )
+        val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install_new_format.json")!!
+                    .readText()
+            )
+        )
+
+        mavenInstall.resolveSibling(".maven_install.json.tmp").let { tmpMavenInstall ->
+            Files.newBufferedWriter(tmpMavenInstall).use { writer ->
+                var first = true
+                mavenInstall.toFile().forEachLine { line ->
+                    if (first) {
+                        first = false
+                    } else {
+                        writer.newLine()
+                    }
+                    writer.write(line.replace(Regex("https(:/)?/jcenter.bintray.com/")) { "http${it.groupValues[1]}/customrepo.example.com/context/" })
+                }
+            }
+            Files.copy(tmpMavenInstall, mavenInstall, StandardCopyOption.REPLACE_EXISTING)
+            Files.delete(tmpMavenInstall)
+        }
+
+        build("rehashMavenInstall")
+        assertThat(Files.exists(mavenInstall)).isTrue()
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/rehashed_maven_install_new_format.json")!!
+                    .readText()
+            )
         )
     }
 
@@ -347,7 +455,7 @@ class BazelDependenciesPluginTest {
             .create()
             .forwardStdOutput(System.out.bufferedWriter())
             .forwardStdError(System.err.bufferedWriter())
-            .withProjectDir(temporaryFolder.root)
+            .withProjectDir(temporaryFolder!!.toFile())
             .withPluginClasspath()
             .withArguments(*arguments)
             .build()
@@ -363,6 +471,6 @@ class BazelDependenciesPluginTest {
         }
 
     private fun newFile(fileName: String): File =
-        temporaryFolder.newFile(fileName)
+        temporaryFolder!!.resolve(fileName).toFile()
 
 }

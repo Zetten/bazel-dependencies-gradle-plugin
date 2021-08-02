@@ -1,12 +1,11 @@
 plugins {
     `java-gradle-plugin`
     `kotlin-dsl`
-    id("com.gradle.plugin-publish") version "0.12.0"
-    kotlin("plugin.serialization") version "1.3.61"
+    id("com.gradle.plugin-publish") version "0.15.0"
 }
 
 group = "com.github.zetten"
-version = "1.8.0"
+version = "2.0.0"
 
 description = """
 Generate Bazel Java dependency rules from Gradle project configuration
@@ -18,11 +17,13 @@ repositories {
 }
 
 dependencies {
-    implementation("gradle.plugin.com.github.jk1:gradle-license-report:1.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-runtime:0.14.0")
-    implementation("io.projectreactor:reactor-core:3.3.2.RELEASE")
-    implementation("io.projectreactor.kotlin:reactor-kotlin-extensions:1.0.2.RELEASE")
-    testImplementation("junit:junit:4.12")
+    implementation("com.github.jk1:gradle-license-report:1.17")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.12.4")
+    implementation("com.fasterxml.jackson.core:jackson-annotations:2.12.4")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.12.4")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.7.2")
+    testImplementation("com.google.truth:truth:1.1.3")
 }
 
 pluginBundle {
@@ -41,4 +42,8 @@ gradlePlugin {
             implementationClass = "com.github.zetten.bazeldeps.BazelDependenciesPlugin"
         }
     }
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

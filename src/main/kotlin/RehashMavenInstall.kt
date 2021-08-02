@@ -1,10 +1,10 @@
 package com.github.zetten.bazeldeps
 
-import kotlinx.serialization.UnstableDefault
-import kotlinx.serialization.json.Json
+import net.swiftzer.semver.SemVer
 import org.gradle.api.DefaultTask
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.CacheableTask
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -15,24 +15,31 @@ import java.io.File
 @CacheableTask
 open class RehashMavenInstall : DefaultTask() {
 
+    // This task replaces in-place so this is technically @OutputFile as well...
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
-    // This task replaces in-place so this is technically @OutputFile as well...
     val mavenInstallJsonFile: Property<File> = project.objects.property()
 
-    @UseExperimental(UnstableDefault::class)
+    @Input
+    val rulesJvmExternalVersion: Property<SemVer> = project.objects.property<SemVer>().convention(SemVer(4, 0))
+
     @TaskAction
     fun rehashMavenInstall() {
         val target = mavenInstallJsonFile.get()
 
-        val mavenInstall = Json.parse(MavenInstallJson.serializer(), target.readText())
+        val mavenInstall = MavenInstallJson.from(target)
 
-        target.writeText(
-            mavenInstall.copy(
-                dependencyTree = mavenInstall.dependencyTree.copy(
-                    dependencyTreeSignature = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
+        mavenInstall.copy(
+            dependencyTree =
+            if (rulesJvmExternalVersion.get() < SemVer(4, 1)) {
+                mavenInstall.dependencyTree.copy(
+                    oldDependencyTreeSignature = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
                 )
-            ).toJson()
-        )
+            } else {
+                mavenInstall.dependencyTree.copy(
+                    resolvedArtifactsHash = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
+                )
+            }
+        ).write(target)
     }
 }

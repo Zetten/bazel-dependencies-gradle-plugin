@@ -57,6 +57,18 @@ Features:
 
   This version adds support for rehashing the version pinning file
   `maven_install.json`, with a new task: `rehashMavenInstall`.
+* Version 2.0.0 adds support for the new checksum format introduced in
+  rules_jvm_external. This is managed with a new property to describe the
+  version of the rules dependency:
+  ```kotlin
+  bazelDependencies {
+    rulesJvmExternalVersion.set("4.1.0")
+  }
+  ```
+
+  Additionally, configuration of the `com.github.jk1.dependency-license-report`
+  plugin is pulled from the project if the plugin is already applied, enabling
+  some tweaking of the discovered license data.
 
 ## Usage
 
@@ -87,11 +99,11 @@ dependency.
 ### Optional configuration parameters
 
 * `createMavenInstallJson` (default `True`): A `Boolean` effective in the
-  `generateRulesJvmExternal` task, to cause `generateWorkspace` to create a
-  `maven_install.json` file alongside the `java_repositories.bzl` file. This
-  JSON file is intended to be usable with the `maven_install_json` attribute of
-  `maven_install` from [rules_jvm_external][4], for faster and cacheable
-  resolution of Maven dependencies.
+  `generateRulesJvmExternal` task, creating a `maven_install.json` file
+  alongside the `java_repositories.bzl` file. This JSON file is intended to be
+  usable with the `maven_install_json` attribute of `maven_install` from
+  [rules_jvm_external][4], for faster and cacheable resolution of Maven
+  dependencies.
 * `strictLicenses` (default `True`): A `Boolean` to control whether
   `generateJvmMavenImportExternal` should fail in the event that a known license
   level for each dependency cannot be determined.
@@ -126,6 +138,9 @@ dependency.
   test libraries into production artifacts. Currently only functional with
   `generateRulesJvmExternal`, and the `testonly` attribute is only supported by
   rules_jvm_external &gt; 3.1.
+* `rulesJvmExternalVersion` (default `"4.0"`): A `String` describing the target
+  version of rules_jvm_external. This controls the output format of
+  `maven_install.json`.
 
 ## Example (kotlin-dsl)
 

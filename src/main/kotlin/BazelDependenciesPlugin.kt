@@ -1,7 +1,10 @@
 package com.github.zetten.bazeldeps
 
+import com.github.jk1.license.LicenseReportExtension
+import com.github.jk1.license.filter.LicenseBundleNormalizer
 import com.github.jk1.license.reader.CachedModuleReader
 import com.github.jk1.license.reader.ConfigurationReader
+import net.swiftzer.semver.SemVer
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
@@ -9,6 +12,7 @@ import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
@@ -16,25 +20,27 @@ import org.gradle.api.provider.Provider
 import org.gradle.api.provider.SetProperty
 import org.gradle.jvm.JvmLibrary
 import org.gradle.kotlin.dsl.create
+import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.getArtifacts
 import org.gradle.kotlin.dsl.mapProperty
 import org.gradle.kotlin.dsl.property
 import org.gradle.kotlin.dsl.setProperty
 import org.gradle.kotlin.dsl.withArtifacts
 import org.gradle.language.base.artifact.SourcesArtifact
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.io.File
 
-
 class BazelDependenciesPlugin : Plugin<Project> {
-    private val logger: Logger = LoggerFactory.getLogger(BazelDependenciesPlugin::class.java)
-
     override fun apply(project: Project): Unit = project.run {
         extensions.create("bazelDependencies", BazelDependencies::class)
-        plugins.apply("com.github.jk1.dependency-license-report")
 
         val bazelDependencies = extensions.findByName("bazelDependencies") as BazelDependencies
+
+        if (!plugins.hasPlugin("com.github.jk1.dependency-license-report")) {
+            plugins.apply("com.github.jk1.dependency-license-report")
+            (extensions["licenseReport"] as LicenseReportExtension).run {
+                filters = arrayOf(LicenseBundleNormalizer())
+            }
+        }
 
         val projectRepositories = project.provider {
             project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
@@ -46,6 +52,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
             bazelDependencies.compileOnly,
             bazelDependencies.testOnly
         )
+
         tasks.create("generateJvmMavenImportExternal", GenerateJvmMavenImportExternal::class) {
             outputFile.set(bazelDependencies.outputFile)
             dependencies.set(projectDependencies)
@@ -64,15 +71,17 @@ class BazelDependenciesPlugin : Plugin<Project> {
         }
 
         tasks.create("generateRulesJvmExternal", GenerateRulesJvmExternal::class) {
-            outputFile.set(bazelDependencies.outputFile)
-            createMavenInstallJson.set(bazelDependencies.createMavenInstallJson)
-            mavenInstallJsonFile.set(bazelDependencies.outputFile.map { it.resolveSibling("maven_install.json") })
             dependencies.set(projectDependencies)
             repositories.set(projectRepositories)
+            createMavenInstallJson.set(bazelDependencies.createMavenInstallJson)
+            rulesJvmExternalVersion.set(bazelDependencies.rulesJvmExternalVersion.map { SemVer.parse(it) })
+            outputFile.set(bazelDependencies.outputFile)
+            mavenInstallJsonFile.set(bazelDependencies.outputFile.map { it.resolveSibling("maven_install.json") })
         }
 
         tasks.create("rehashMavenInstall", RehashMavenInstall::class) {
             mavenInstallJsonFile.set(bazelDependencies.outputFile.map { it.resolveSibling("maven_install.json") })
+            rulesJvmExternalVersion.set(bazelDependencies.rulesJvmExternalVersion.map { SemVer.parse(it) })
         }
     }
 }
@@ -88,6 +97,7 @@ open class BazelDependencies(objects: ObjectFactory) {
     var safeSources: Property<Boolean> = objects.property<Boolean>().convention(false)
     var sourcesChecksums: Property<Boolean> = objects.property<Boolean>().convention(false)
     var createMavenInstallJson: Property<Boolean> = objects.property<Boolean>().convention(true)
+    var rulesJvmExternalVersion: Property<String> = objects.property<String>().convention("4.0")
 }
 
 fun projectDependencies(
@@ -171,7 +181,12 @@ fun dependencyLicenseData(
     licenseOverrides: Provider<Map<String, String>>
 ): Provider<Map<ProjectDependency, List<LicenseData>>> = project.provider {
     val result: MutableMap<ProjectDependency, List<LicenseData>> = mutableMapOf()
-    val licenseConfigData = ConfigurationReader(CachedModuleReader()).read(project, configuration.get())
+    val licenseReportExtension = project.extensions["licenseReport"] as LicenseReportExtension
+    val licenseConfigData =
+        ConfigurationReader(licenseReportExtension, CachedModuleReader(licenseReportExtension)).read(
+            project,
+            configuration.get()
+        )
     for (it in projectDependencies.get()) {
         val ld = ArrayList<LicenseData>()
         val licenseOverride = licenseOverrides.get()[it.getMavenIdentifier()]

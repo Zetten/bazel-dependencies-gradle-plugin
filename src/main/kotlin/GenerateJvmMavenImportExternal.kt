@@ -1,28 +1,33 @@
 package com.github.zetten.bazeldeps
 
-import org.gradle.api.Action
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
-import org.gradle.api.provider.Provider
 import org.gradle.api.provider.SetProperty
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
+import org.gradle.internal.hash.HashUtil
 import org.gradle.kotlin.dsl.listProperty
 import org.gradle.kotlin.dsl.mapProperty
 import org.gradle.kotlin.dsl.property
 import org.gradle.kotlin.dsl.setProperty
-import org.gradle.workers.IsolationMode
-import org.gradle.workers.WorkerConfiguration
+import org.gradle.workers.WorkAction
+import org.gradle.workers.WorkParameters
 import org.gradle.workers.WorkerExecutor
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import javax.inject.Inject
 
 @CacheableTask
-open class GenerateJvmMavenImportExternal @Inject constructor(private val workerExecutor: WorkerExecutor) : DefaultTask() {
+open class GenerateJvmMavenImportExternal @Inject constructor(private val workerExecutor: WorkerExecutor) :
+    DefaultTask() {
 
     @Input
     val dependencies: SetProperty<ProjectDependency> = project.objects.setProperty()
@@ -42,7 +47,6 @@ open class GenerateJvmMavenImportExternal @Inject constructor(private val worker
     @Input
     val safeSources: Property<Boolean> = project.objects.property<Boolean>().convention(false)
 
-
     @OutputFile
     val outputFile: Property<File> = project.objects.property()
 
@@ -55,26 +59,22 @@ open class GenerateJvmMavenImportExternal @Inject constructor(private val worker
 
         val sortedDependencies = dependencies.get().sorted()
 
-        val snippetFiles = sortedDependencies.map {
-            val snippetFile = temporaryDir.resolve("${it.getBazelIdentifier()}.snippet")
-            workerExecutor.submit(GenerateDependencySnippet::class.java, object : Action<WorkerConfiguration> {
-                override fun execute(config: WorkerConfiguration) {
-                    config.isolationMode = IsolationMode.NONE
-                    config.params(
-                            snippetFile,
-                            it,
-                            repositories.get(),
-                            licenseData.get()[it],
-                            strictLicenses.get(),
-                            dependenciesAttr.get(),
-                            safeSources.get()
-                    )
-                }
-            })
+        val snippetFiles = sortedDependencies.map { dependency ->
+            val snippetFile = temporaryDir.resolve("${dependency.getBazelIdentifier()}.snippet")
+            workerExecutor.noIsolation().submit(GenerateDependencySnippet::class.java) {
+                getOutputFile().set(snippetFile)
+                getDependency().set(dependency)
+                getRepositories().set(repositories)
+                getLicenseData().set(licenseData.map { it[dependency] ?: emptyList() })
+                getStrictLicenses().set(strictLicenses)
+                getDependenciesAttr().set(dependenciesAttr)
+                getSafeSources().set(safeSources)
+            }
             snippetFile
         }
 
-        output.writeText("""
+        output.writeText(
+            """
             |load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
             |
             |def _replace_dependencies(dependencies, replacements):
@@ -87,14 +87,17 @@ open class GenerateJvmMavenImportExternal @Inject constructor(private val worker
             |    return new_dependencies.to_list()
 
             |def java_repositories(
-            |""".trimMargin())
+            |""".trimMargin()
+        )
         sortedDependencies.forEach {
             output.appendText("        omit_${it.getBazelIdentifier()} = False,\n")
         }
-        output.appendText("""
+        output.appendText(
+            """
             |        fetch_sources = False,
             |        replacements = {}):
-            |""".trimMargin())
+            |""".trimMargin()
+        )
         sortedDependencies.forEach {
             output.appendText("    if not omit_${it.getBazelIdentifier()}:\n        ${it.getBazelIdentifier()}(fetch_sources, replacements)\n")
         }
@@ -111,5 +114,107 @@ open class GenerateJvmMavenImportExternal @Inject constructor(private val worker
             }
         }
     }
+}
 
+interface GenerateDependencySnippetParams : WorkParameters {
+    fun getOutputFile(): RegularFileProperty
+    fun getDependency(): Property<ProjectDependency>
+    fun getRepositories(): ListProperty<String>
+    fun getLicenseData(): ListProperty<LicenseData>
+    fun getStrictLicenses(): Property<Boolean>
+    fun getDependenciesAttr(): Property<String>
+    fun getSafeSources(): Property<Boolean>
+}
+
+abstract class GenerateDependencySnippet : WorkAction<GenerateDependencySnippetParams> {
+    private val logger: Logger = LoggerFactory.getLogger(GenerateDependencySnippet::class.java)
+
+    override fun execute() {
+        val outputFile = parameters.getOutputFile().asFile.get()
+        val dependency = parameters.getDependency().get()
+        val repositories = parameters.getRepositories().get()
+        val licenseData = parameters.getLicenseData().get()
+        val strictLicenses = parameters.getStrictLicenses().get()
+        val dependenciesAttr = parameters.getDependenciesAttr().get()
+        val safeSources = parameters.getSafeSources().get()
+
+        logger.info("Generating Bazel repository rule for ${dependency.id}")
+
+        val mostRestrictiveLicense = try {
+            Licenses.getMostRestrictiveLicense(licenseData)
+        } catch (e: Exception) {
+            if (strictLicenses) throw IllegalStateException(
+                "Could not determine a license for ${dependency.getMavenIdentifier()}",
+                e
+            )
+            "none"
+        }
+
+        val jarSha256 = HashUtil.sha256(dependency.jar!!).asZeroPaddedHexString(64)
+        val serverUrls = repositories.filter { artifactExists(dependency, it) }
+        val srcjarSha256 = if (dependency.srcJar != null) "\"${
+            HashUtil.sha256(dependency.srcJar).asZeroPaddedHexString(64)
+        }\"" else "None"
+
+        outputFile.writeText("""
+                |def ${dependency.getBazelIdentifier()}(fetch_sources, replacements):
+                |    jvm_maven_import_external(
+                |        name = "${dependency.getBazelIdentifier()}",
+                |        artifact = "${dependency.getJvmMavenImportExternalCoordinates()}",
+                |        ${
+            serverUrls.sorted().joinToString(
+                "\n",
+                prefix = "server_urls = [\n",
+                postfix = "\n        "
+            ) { "            \"${it}\"," }
+        }],
+                |        artifact_sha256 = "$jarSha256",
+                |        licenses = ["$mostRestrictiveLicense"],
+                |        fetch_sources = ${getFetchSources(safeSources, dependency, repositories)},
+                |        srcjar_sha256 = ${srcjarSha256},
+                |        ${
+            dependency.dependencies.map { it.getBazelIdentifier() }.joinToString(
+                "",
+                prefix = "$dependenciesAttr = _replace_dependencies([",
+                postfix = "\n        "
+            ) { "\n            \"@${it}\"," }
+        }], replacements),
+                |        tags = [
+                |            "maven_coordinates=${dependency.getMavenCoordinatesTag()}",
+                |        ],
+                |    )
+                |""".trimMargin()
+        )
+    }
+
+    private fun artifactExists(dependency: ProjectDependency, repository: String): Boolean {
+        val artifactUrl = "${dependency.getArtifactUrl(repository)}.jar"
+        val code = with(URL(artifactUrl).openConnection() as HttpURLConnection) {
+            requestMethod = "HEAD"
+            connect()
+            responseCode
+        }
+        logger.debug("Received $code for sources artifact at $artifactUrl")
+        return (code in 100..399)
+    }
+
+    private fun getFetchSources(
+        safeSources: Boolean,
+        dependency: ProjectDependency,
+        repositories: List<String>
+    ) = if (safeSources && !sourcesExists(dependency, repositories)) "False" else "fetch_sources"
+
+    private fun sourcesExists(dependency: ProjectDependency, repositories: List<String>): Boolean {
+        for (it in repositories) {
+            val artifactUrl = "${dependency.getArtifactUrl(it)}-sources.jar"
+            val code = with(URL(artifactUrl).openConnection() as HttpURLConnection) {
+                requestMethod = "HEAD"
+                connect()
+                responseCode
+            }
+            logger.debug("Received $code for sources artifact at $artifactUrl")
+            if (code in 100..399) return true
+        }
+        return false
+    }
 }

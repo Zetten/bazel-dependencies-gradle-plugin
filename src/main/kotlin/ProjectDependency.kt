@@ -20,7 +20,8 @@ data class ProjectDependency(
     val overrideLicenseTypes: List<String>? = null,
     val exclusions: List<String>? = null,
     val neverlink: Boolean = false,
-    val testonly: Boolean = false
+    val testonly: Boolean = false,
+    val packaging: String? = if (jar!!.extension != "jar") jar.extension else null
 ) : Comparable<ProjectDependency>, Serializable {
 
     fun getBazelIdentifier(): String {
@@ -59,13 +60,7 @@ data class ProjectDependency(
         }
     }
 
-    private fun getArtifactPackaging(): String {
-        return if (!jar!!.extension.equals("jar")) {
-            ":${jar.extension}"
-        } else {
-            ""
-        }
-    }
+    private fun getArtifactPackaging(): String = packaging?.let { ":$it" }.orEmpty()
 
     private fun sanitize(s: String): String {
         return s.replace(Regex("[^\\w]"), "_")
@@ -105,6 +100,8 @@ data class ProjectDependency(
             if (code in 100..399) artifactUrl else null
         }
     }
+
+    internal fun getArtifactUrl(repoUrl: String) = getArtifactUrl(getMavenIdentifier(), repoUrl)
 
     private fun getArtifactUrl(mavenIdentifier: String, repoUrl: String): String {
         val parts = mavenIdentifier.split(':')
