@@ -258,8 +258,8 @@ data class MavenSpec(
     @JsonProperty("classifier") @JsonInclude(JsonInclude.Include.NON_NULL) val classifier: String? = null,
     @JsonProperty("override_license_types") @JsonInclude(JsonInclude.Include.NON_NULL) val overrideLicenseTypes: List<String>? = null,
     @JsonProperty("exclusions") @JsonInclude(JsonInclude.Include.NON_NULL) val exclusions: List<MavenExclusionSpec>? = null,
-    @JsonProperty("neverlink") @JsonInclude(JsonInclude.Include.NON_NULL) val neverlink: Boolean? = null,
-    @JsonProperty("testonly") @JsonInclude(JsonInclude.Include.NON_NULL) val testonly: Boolean? = null
+    @JsonProperty("neverlink") @JsonInclude(JsonInclude.Include.NON_NULL) val neverlink: String? = null,
+    @JsonProperty("testonly") @JsonInclude(JsonInclude.Include.NON_NULL) val testonly: String? = null
 ) {
     constructor(dep: ProjectDependency) : this(
         dep.id.group,
@@ -269,8 +269,8 @@ data class MavenSpec(
         dep.classifier,
         dep.overrideLicenseTypes,
         null /* exclusions are managed directly in maven_install.json */,
-        if (dep.neverlink) true else null,
-        if (dep.testonly) true else null
+        if (dep.neverlink) "True" else null,
+        if (dep.testonly) "True" else null
     )
 }
 
