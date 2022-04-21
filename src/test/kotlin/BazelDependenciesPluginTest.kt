@@ -205,7 +205,7 @@ internal class BazelDependenciesPluginTest {
                 compileOnly.set(setOf(
                     "com.google.errorprone:error_prone_annotations:2.1.3",
                     "com.google.j2objc:j2objc-annotations:1.1",
-                    "org.codehaus.mojo:animal-sniffer-annotations:1.14"
+                    "org.codehaus.mojo:animal-sniffer-annotations" // test lenient dependency matching
                 ))
                 testOnly.set(setOf("junit:junit:4.12"))
             }

@@ -19,7 +19,7 @@ import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
-import org.gradle.internal.hash.HashUtil
+import org.gradle.internal.hash.Hashing
 import org.gradle.kotlin.dsl.listProperty
 import org.gradle.kotlin.dsl.property
 import org.gradle.kotlin.dsl.setProperty
@@ -166,7 +166,7 @@ abstract class GenerateDependencyTreeSnippet : WorkAction<DependencyTreeMapperPa
             dependencies = dependency.allDependencies.map { it.getJvmMavenImportExternalCoordinates() }.sorted(),
             url = urls.first(),
             mirrorUrls = urls,
-            sha256 = HashUtil.sha256(dependency.jar!!).asZeroPaddedHexString(64),
+            sha256 = Hashing.sha256().hashFile(dependency.jar!!).toZeroPaddedString(64),
             file = "v1/${urls.first().replace("://", "/")}"
         )
         objectMapper.writeValue(outputFile, dependencyTreeEntry)

@@ -69,6 +69,9 @@ Features:
   Additionally, configuration of the `com.github.jk1.dependency-license-report`
   plugin is pulled from the project if the plugin is already applied, enabling
   some tweaking of the discovered license data.
+* Version 2.1.0 supports Gradle &ge; 7.4, and supports more
+  flexible `compileOnly`/`testOnly` matching by optionally omitting dependency
+  versions.
 
 ## Usage
 

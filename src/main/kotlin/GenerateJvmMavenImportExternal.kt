@@ -10,7 +10,7 @@ import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
-import org.gradle.internal.hash.HashUtil
+import org.gradle.internal.hash.Hashing
 import org.gradle.kotlin.dsl.listProperty
 import org.gradle.kotlin.dsl.mapProperty
 import org.gradle.kotlin.dsl.property
@@ -150,10 +150,10 @@ abstract class GenerateDependencySnippet : WorkAction<GenerateDependencySnippetP
             "none"
         }
 
-        val jarSha256 = HashUtil.sha256(dependency.jar!!).asZeroPaddedHexString(64)
+        val jarSha256 = Hashing.sha256().hashFile(dependency.jar!!).toZeroPaddedString(64)
         val serverUrls = repositories.filter { artifactExists(dependency, it) }
         val srcjarSha256 = if (dependency.srcJar != null) "\"${
-            HashUtil.sha256(dependency.srcJar).asZeroPaddedHexString(64)
+            Hashing.sha256().hashFile(dependency.srcJar).toZeroPaddedString(64)
         }\"" else "None"
 
         outputFile.writeText("""

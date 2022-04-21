@@ -12,7 +12,6 @@ import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
-import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
@@ -45,12 +44,16 @@ class BazelDependenciesPlugin : Plugin<Project> {
         val projectRepositories = project.provider {
             project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
         }
+        val compileOnlyMatchers =
+            bazelDependencies.compileOnly.map { it.map { compileOnly -> ProjectDependencyMatcher.of(compileOnly) } }
+        val testOnlyMatchers =
+            bazelDependencies.testOnly.map { it.map { testOnly -> ProjectDependencyMatcher.of(testOnly) } }
         val projectDependencies = projectDependencies(
             project,
             bazelDependencies.configuration,
             bazelDependencies.sourcesChecksums,
-            bazelDependencies.compileOnly,
-            bazelDependencies.testOnly
+            compileOnlyMatchers,
+            testOnlyMatchers,
         )
 
         tasks.create("generateJvmMavenImportExternal", GenerateJvmMavenImportExternal::class) {
@@ -104,8 +107,8 @@ fun projectDependencies(
     project: Project,
     configuration: Property<Configuration>,
     sourcesChecksums: Property<Boolean>,
-    compileOnly: SetProperty<String>,
-    testOnly: SetProperty<String>
+    compileOnly: Provider<List<ProjectDependencyMatcher>>,
+    testOnly: Provider<List<ProjectDependencyMatcher>>
 ): Provider<Set<ProjectDependency>> = project.provider {
     configuration.get().resolvedConfiguration.firstLevelModuleDependencies
         .filter { it.moduleArtifacts.isNotEmpty() }
@@ -117,8 +120,8 @@ private fun walkDependencies(
     resolvedDependency: ResolvedDependency,
     project: Project,
     resolveSrcJars: Boolean,
-    compileOnly: Set<String>,
-    testOnly: Set<String>
+    compileOnly: List<ProjectDependencyMatcher>,
+    testOnly: List<ProjectDependencyMatcher>
 ): Iterable<ProjectDependency> {
     val dependenciesWithArtifacts = resolvedDependency.children.filter { it.moduleArtifacts.isNotEmpty() }
     val transitiveDeps =
@@ -138,20 +141,8 @@ private fun walkDependencies(
         allDependencies = transitiveDeps,
         jar = jar,
         srcJar = if (resolveSrcJars) findSrcJar(id, project) else null,
-        neverlink = compileOnly.contains(
-            if (classifier != null) {
-                "$id:$classifier"
-            } else {
-                id.toString()
-            }
-        ),
-        testonly = testOnly.contains(
-            if (classifier != null) {
-                "$id:$classifier"
-            } else {
-                id.toString()
-            }
-        )
+        neverlink = compileOnly.any { it.matches(id, classifier) },
+        testonly = testOnly.any { it.matches(id, classifier) }
     )
 
     return setOf(dep) + transitiveDeps
@@ -210,4 +201,30 @@ fun dependencyLicenseData(
         result[it] = ld
     }
     result
+}
+
+data class ProjectDependencyMatcher(
+    val group: String,
+    val name: String,
+    val version: String? = null,
+    val classifier: String? = null
+) {
+    companion object {
+        fun of(id: String): ProjectDependencyMatcher {
+            return id.split(':').let {
+                when (it.size) {
+                    2 -> ProjectDependencyMatcher(it[0], it[1])
+                    3 -> ProjectDependencyMatcher(it[0], it[1], it[2])
+                    4 -> ProjectDependencyMatcher(it[0], it[1], it[2], it[3])
+                    else -> throw IllegalArgumentException("Could not parse module identifier from $id")
+                }
+            }
+        }
+    }
+
+    fun matches(id: ModuleVersionIdentifier, classifier: String?): Boolean =
+        this.group == id.group
+                && this.name == id.name
+                && (this.version == null || this.version == id.version)
+                && (this.classifier == null || this.classifier == classifier)
 }
