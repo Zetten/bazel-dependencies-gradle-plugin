@@ -31,7 +31,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -67,7 +67,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -110,7 +110,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -149,7 +149,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -187,7 +187,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -232,7 +232,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -276,7 +276,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -321,7 +321,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -363,7 +363,7 @@ internal class BazelDependenciesPluginTest {
                     } else {
                         writer.newLine()
                     }
-                    writer.write(line.replace(Regex("https(:/)?/jcenter.bintray.com/")) { "http${it.groupValues[1]}/customrepo.example.com/context/" })
+                    writer.write(line.replace(Regex("https(:/)?/repo.maven.apache.org/maven2/")) { "http${it.groupValues[1]}/customrepo.example.com/context/" })
                 }
             }
             Files.copy(tmpMavenInstall, mavenInstall, StandardCopyOption.REPLACE_EXISTING)
@@ -390,7 +390,7 @@ internal class BazelDependenciesPluginTest {
             }
 
             repositories {
-                jcenter()
+                mavenCentral()
             }
 
             val generate by configurations.creating
@@ -433,7 +433,7 @@ internal class BazelDependenciesPluginTest {
                     } else {
                         writer.newLine()
                     }
-                    writer.write(line.replace(Regex("https(:/)?/jcenter.bintray.com/")) { "http${it.groupValues[1]}/customrepo.example.com/context/" })
+                    writer.write(line.replace(Regex("https(:/)?/repo.maven.apache.org/maven2/")) { "http${it.groupValues[1]}/customrepo.example.com/context/" })
                 }
             }
             Files.copy(tmpMavenInstall, mavenInstall, StandardCopyOption.REPLACE_EXISTING)

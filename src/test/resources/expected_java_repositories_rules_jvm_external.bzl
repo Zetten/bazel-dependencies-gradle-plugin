@@ -1,7 +1,7 @@
 load("@rules_jvm_external//:specs.bzl", "maven")
 
 REPOSITORIES = [
-    "https://jcenter.bintray.com/",
+    "https://repo.maven.apache.org/maven2/",
 ]
 
 ARTIFACTS = [
