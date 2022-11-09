@@ -31,13 +31,14 @@ open class RehashMavenInstall : DefaultTask() {
 
         mavenInstall.copy(
             dependencyTree =
-            if (rulesJvmExternalVersion.get() < SemVer(4, 1)) {
+            // no special treatment for 4.3+ yet - the new inputs signature function shouldn't notice our changes
+            if (rulesJvmExternalVersion.get() >= SemVer(4, 1)) {
                 mavenInstall.dependencyTree.copy(
-                    oldDependencyTreeSignature = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
+                    resolvedArtifactsHash = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
                 )
             } else {
                 mavenInstall.dependencyTree.copy(
-                    resolvedArtifactsHash = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
+                    oldDependencyTreeSignature = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
                 )
             }
         ).write(target)
