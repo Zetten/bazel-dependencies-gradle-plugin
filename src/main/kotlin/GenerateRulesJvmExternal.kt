@@ -256,7 +256,7 @@ data class MavenInstallJson(
                 resolvedArtifactsHash = computeDependencyTreeSignature(dependencyTreeEntries),
                 inputArtifactsHash = computeDependencyInputsSignature(
                     rulesJvmExternalSemVer,
-                    dependencies,
+                    dependencies.map { MavenSpec(it) },
                     repositories
                 )
             )
@@ -300,11 +300,11 @@ internal fun computeDependencyTreeSignature(dependencies: List<DependencyTreeEnt
 // Implementation of https://github.com/bazelbuild/rules_jvm_external/blob/8feca27d7efed5a3343f8dbfe1199987598ca778/coursier.bzl#L205
 internal fun computeDependencyInputsSignature(
     rulesJvmExternalSemVer: SemVer,
-    dependencies: List<ProjectDependency>,
+    dependencies: List<MavenSpec>,
     repositories: List<String>
 ): Int {
     val signatureInputs = dependencies.map { dep ->
-        val depAttrs: SortedMap<String, Any> = objectMapper.readValue(objectMapper.writeValueAsBytes(MavenSpec(dep)))
+        val depAttrs: SortedMap<String, Any> = objectMapper.readValue(objectMapper.writeValueAsBytes(dep))
         depAttrs.entries.joinToString(":") { "${it.key}=${it.value}" }
     }
     val artifactsString = "[${signatureInputs.sorted().joinToString(", ") { "\"$it\"" }}]"

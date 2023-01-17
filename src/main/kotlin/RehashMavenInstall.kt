@@ -15,6 +15,10 @@ import java.io.File
 @CacheableTask
 open class RehashMavenInstall : DefaultTask() {
 
+    @InputFile
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    val javaRepositoriesBzlFile: Property<File> = project.objects.property()
+
     // This task replaces in-place so this is technically @OutputFile as well...
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
@@ -31,8 +35,49 @@ open class RehashMavenInstall : DefaultTask() {
 
         mavenInstall.copy(
             dependencyTree =
-            // no special treatment for 4.3+ yet - the new inputs signature function shouldn't notice our changes
-            if (rulesJvmExternalVersion.get() >= SemVer(4, 1)) {
+            if (rulesJvmExternalVersion.get() >= SemVer(4, 3)) {
+                // Parse the inputs from our java_repositories.bzl file - this could get messy if it's been modified, but it'll do for most cases
+                val inputs = javaRepositoriesBzlFile.get().readText()
+                val dependencies =
+                    Regex(
+                        "^\\s+maven.artifact\\(" +
+                                "\"(?<group>[^\"]*)\", " +
+                                "\"(?<artifact>[^\"]*)\", " +
+                                "\"(?<version>[^\"]*)\"" +
+                                "(, packaging = \"(?<packaging>[^\"]*)\")?" +
+                                "(, classifier = \"(?<classifier>[^\"]*)\")?" +
+                                "(, override_license_types = \\[(?<overrideLicenseTypes>[^]]*)])?" +
+                                "(, exclusions = \\[(?<exclusions>.*)])?" +
+                                "(, neverlink = (?<neverlink>\\w*))?" +
+                                "(, testonly = (?<testonly>\\w*))?" +
+                                "\\),$", RegexOption.MULTILINE
+                    ).findAll(inputs).map {
+                        (it.groups as MatchNamedGroupCollection).let { groups ->
+                            MavenSpec(
+                                groups["group"]!!.value,
+                                groups["artifact"]!!.value,
+                                groups["version"]!!.value,
+                                packaging = groups["packaging"]?.value,
+                                classifier = groups["classifier"]?.value,
+                                overrideLicenseTypes = groups["overrideLicenseTypes"]?.value?.split(", ")
+                                    ?.map { s -> s.removeSurrounding("\"") },
+                                neverlink = groups["neverlink"]?.value,
+                                testonly = groups["testonly"]?.value,
+                            )
+                        }
+                    }.toList()
+                val repositories =
+                    Regex("^\\s+\"(.*)\",$", RegexOption.MULTILINE).findAll(inputs).map { it.groupValues[1] }.toList()
+
+                mavenInstall.dependencyTree.copy(
+                    inputArtifactsHash = computeDependencyInputsSignature(
+                        rulesJvmExternalVersion.get(),
+                        dependencies,
+                        repositories
+                    ),
+                    resolvedArtifactsHash = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
+                )
+            } else if (rulesJvmExternalVersion.get() >= SemVer(4, 1)) {
                 mavenInstall.dependencyTree.copy(
                     resolvedArtifactsHash = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
                 )

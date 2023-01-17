@@ -329,12 +329,20 @@ internal class BazelDependenciesPluginTest {
             dependencies {
                 generate("com.google.guava:guava:26.0-jre")
                 generate("dom4j:dom4j:1.6.1")
+                generate("junit:junit:4.12")
             }
 
             bazelDependencies {
                 configuration.set(generate)
                 outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
                 rulesJvmExternalVersion.set("4.3.0")
+                sourcesChecksums.set(true)
+                compileOnly.set(setOf(
+                    "com.google.errorprone:error_prone_annotations:2.1.3",
+                    "com.google.j2objc:j2objc-annotations:1.1",
+                    "org.codehaus.mojo:animal-sniffer-annotations:1.14"
+                ))
+                testOnly.set(setOf("junit:junit:4.12"))
             }
         """.trimIndent()
         )
@@ -344,7 +352,7 @@ internal class BazelDependenciesPluginTest {
         val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
         assertThat(Files.exists(outputFile)).isTrue()
         assertThat(Files.readString(outputFile)).isEqualTo(
-            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")!!
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external_configured.bzl")!!
                 .readText()
         )
         val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
@@ -513,12 +521,20 @@ internal class BazelDependenciesPluginTest {
             dependencies {
                 generate("com.google.guava:guava:26.0-jre")
                 generate("dom4j:dom4j:1.6.1")
+                generate("junit:junit:4.12")
             }
 
             bazelDependencies {
                 configuration.set(generate)
                 outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
                 rulesJvmExternalVersion.set("4.3.0")
+                sourcesChecksums.set(true)
+                compileOnly.set(setOf(
+                    "com.google.errorprone:error_prone_annotations:2.1.3",
+                    "com.google.j2objc:j2objc-annotations:1.1",
+                    "org.codehaus.mojo:animal-sniffer-annotations:1.14"
+                ))
+                testOnly.set(setOf("junit:junit:4.12"))
             }
         """.trimIndent()
         )
@@ -528,7 +544,7 @@ internal class BazelDependenciesPluginTest {
         val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
         assertThat(Files.exists(outputFile)).isTrue()
         assertThat(Files.readString(outputFile)).isEqualTo(
-            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external.bzl")!!
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external_configured.bzl")!!
                 .readText()
         )
         val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
@@ -539,6 +555,22 @@ internal class BazelDependenciesPluginTest {
             )
         )
 
+
+        outputFile.resolveSibling(".java_repositories.bzl.tmp").let { tmpJavaRepositories ->
+            Files.newBufferedWriter(tmpJavaRepositories).use { writer ->
+                var first = true
+                outputFile.toFile().forEachLine { line ->
+                    if (first) {
+                        first = false
+                    } else {
+                        writer.newLine()
+                    }
+                    writer.write(line.replace(Regex("https(:/)?/repo.maven.apache.org/maven2/")) { "https${it.groupValues[1]}/example.com/repository/maven-central/" })
+                }
+            }
+            Files.copy(tmpJavaRepositories, outputFile, StandardCopyOption.REPLACE_EXISTING)
+            Files.delete(tmpJavaRepositories)
+        }
         mavenInstall.resolveSibling(".maven_install.json.tmp").let { tmpMavenInstall ->
             Files.newBufferedWriter(tmpMavenInstall).use { writer ->
                 var first = true
@@ -548,7 +580,7 @@ internal class BazelDependenciesPluginTest {
                     } else {
                         writer.newLine()
                     }
-                    writer.write(line.replace(Regex("https(:/)?/repo.maven.apache.org/maven2/")) { "https${it.groupValues[1]}/jcenter.bintray.com/" })
+                    writer.write(line.replace(Regex("https(:/)?/repo.maven.apache.org/maven2/")) { "https${it.groupValues[1]}/example.com/repository/maven-central/" })
                 }
             }
             Files.copy(tmpMavenInstall, mavenInstall, StandardCopyOption.REPLACE_EXISTING)

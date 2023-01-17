@@ -83,6 +83,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
         }
 
         tasks.create("rehashMavenInstall", RehashMavenInstall::class) {
+            javaRepositoriesBzlFile.set(bazelDependencies.outputFile)
             mavenInstallJsonFile.set(bazelDependencies.outputFile.map { it.resolveSibling("maven_install.json") })
             rulesJvmExternalVersion.set(bazelDependencies.rulesJvmExternalVersion.map { SemVer.parse(it) })
         }
