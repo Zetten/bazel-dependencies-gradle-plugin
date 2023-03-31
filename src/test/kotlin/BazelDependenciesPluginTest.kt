@@ -365,6 +365,75 @@ internal class BazelDependenciesPluginTest {
     }
 
     @Test
+    fun `rules_jvm_external 5_0 maven_install is supported`() {
+        givenBuildScript(
+            """
+            plugins {
+                base
+                id("com.github.zetten.bazel-dependencies-plugin")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            val generate by configurations.creating
+
+            dependencies {
+                generate("com.google.guava:guava:26.0-jre")
+                generate("dom4j:dom4j:1.6.1")
+                generate("junit:junit:4.12")
+                generate("io.netty:netty-codec:4.1.90.Final")
+                generate("io.netty:netty-codec-dns:4.1.90.Final")
+                generate("io.netty:netty-codec-http:4.1.90.Final")
+                generate("io.netty:netty-codec-socks:4.1.90.Final")
+                generate("io.netty:netty-common:4.1.90.Final")
+                generate("io.netty:netty-handler:4.1.90.Final")
+                generate("io.netty:netty-handler-proxy:4.1.90.Final")
+                generate("io.netty:netty-resolver:4.1.90.Final")
+                generate("io.netty:netty-resolver-dns:4.1.90.Final")
+                generate("io.netty:netty-resolver-dns-classes-macos:4.1.90.Final")
+                generate("io.netty:netty-resolver-dns-native-macos:4.1.90.Final:osx-x86_64")
+                generate("io.netty:netty-transport:4.1.90.Final")
+                generate("io.netty:netty-transport-classes-epoll:4.1.90.Final")
+                generate("io.netty:netty-transport-native-epoll:4.1.90.Final:linux-x86_64")
+                generate("io.netty:netty-transport-native-unix-common:4.1.90.Final")
+                generate("io.projectreactor.netty:reactor-netty-core:1.1.5")
+            }
+
+            bazelDependencies {
+                configuration.set(generate)
+                outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
+                rulesJvmExternalVersion.set("5.0")
+                sourcesChecksums.set(true)
+                compileOnly.set(setOf(
+                    "com.google.errorprone:error_prone_annotations:2.1.3",
+                    "com.google.j2objc:j2objc-annotations:1.1",
+                    "org.codehaus.mojo:animal-sniffer-annotations:1.14"
+                ))
+                testOnly.set(setOf("junit:junit:4.12"))
+            }
+        """.trimIndent()
+        )
+
+        build("generateRulesJvmExternal", "--info")
+
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external_configured_with_classifiers.bzl")!!
+                .readText()
+        )
+        val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install_5.0_format.json")!!
+                    .readText()
+            )
+        )
+    }
+
+    @Test
     fun `rules_jvm_external maven_install may be rehashed`() {
         givenBuildScript(
             """
@@ -592,6 +661,115 @@ internal class BazelDependenciesPluginTest {
         assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
             objectMapper.readTree(
                 BazelDependenciesPluginTest::class.java.getResource("/rehashed_maven_install_4.3_format.json")!!
+                    .readText()
+            )
+        )
+    }
+
+    @Test
+    fun `rules_jvm_external 5_0 maven_install may be rehashed`() {
+        givenBuildScript(
+            """
+            plugins {
+                base
+                id("com.github.zetten.bazel-dependencies-plugin")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            val generate by configurations.creating
+
+            dependencies {
+                generate("com.google.guava:guava:26.0-jre")
+                generate("dom4j:dom4j:1.6.1")
+                generate("junit:junit:4.12")
+                generate("io.netty:netty-codec:4.1.90.Final")
+                generate("io.netty:netty-codec-dns:4.1.90.Final")
+                generate("io.netty:netty-codec-http:4.1.90.Final")
+                generate("io.netty:netty-codec-socks:4.1.90.Final")
+                generate("io.netty:netty-common:4.1.90.Final")
+                generate("io.netty:netty-handler:4.1.90.Final")
+                generate("io.netty:netty-handler-proxy:4.1.90.Final")
+                generate("io.netty:netty-resolver:4.1.90.Final")
+                generate("io.netty:netty-resolver-dns:4.1.90.Final")
+                generate("io.netty:netty-resolver-dns-classes-macos:4.1.90.Final")
+                generate("io.netty:netty-resolver-dns-native-macos:4.1.90.Final:osx-x86_64")
+                generate("io.netty:netty-transport:4.1.90.Final")
+                generate("io.netty:netty-transport-classes-epoll:4.1.90.Final")
+                generate("io.netty:netty-transport-native-epoll:4.1.90.Final:linux-x86_64")
+                generate("io.netty:netty-transport-native-unix-common:4.1.90.Final")
+                generate("io.projectreactor.netty:reactor-netty-core:1.1.5")
+            }
+
+            bazelDependencies {
+                configuration.set(generate)
+                outputFile.set(project.buildDir.resolve("java_repositories.bzl"))
+                rulesJvmExternalVersion.set("5.0.0")
+                sourcesChecksums.set(true)
+                compileOnly.set(setOf(
+                    "com.google.errorprone:error_prone_annotations:2.1.3",
+                    "com.google.j2objc:j2objc-annotations:1.1",
+                    "org.codehaus.mojo:animal-sniffer-annotations:1.14"
+                ))
+                testOnly.set(setOf("junit:junit:4.12"))
+            }
+        """.trimIndent()
+        )
+
+        build("generateRulesJvmExternal", "--info")
+
+        val outputFile = temporaryFolder!!.resolve("build/java_repositories.bzl")
+        assertThat(Files.exists(outputFile)).isTrue()
+        assertThat(Files.readString(outputFile)).isEqualTo(
+            BazelDependenciesPluginTest::class.java.getResource("/expected_java_repositories_rules_jvm_external_configured_with_classifiers.bzl")!!
+                .readText()
+        )
+        val mavenInstall = temporaryFolder!!.resolve("build/maven_install.json")
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/expected_maven_install_5.0_format.json")!!
+                    .readText()
+            )
+        )
+
+        outputFile.resolveSibling(".java_repositories.bzl.tmp").let { tmpJavaRepositories ->
+            Files.newBufferedWriter(tmpJavaRepositories).use { writer ->
+                var first = true
+                outputFile.toFile().forEachLine { line ->
+                    if (first) {
+                        first = false
+                    } else {
+                        writer.newLine()
+                    }
+                    writer.write(line.replace(Regex("https(:/)?/repo.maven.apache.org/maven2/")) { "https${it.groupValues[1]}/example.com/repository/maven-central/" })
+                }
+            }
+            Files.copy(tmpJavaRepositories, outputFile, StandardCopyOption.REPLACE_EXISTING)
+            Files.delete(tmpJavaRepositories)
+        }
+        mavenInstall.resolveSibling(".maven_install.json.tmp").let { tmpMavenInstall ->
+            Files.newBufferedWriter(tmpMavenInstall).use { writer ->
+                var first = true
+                mavenInstall.toFile().forEachLine { line ->
+                    if (first) {
+                        first = false
+                    } else {
+                        writer.newLine()
+                    }
+                    writer.write(line.replace(Regex("https(:/)?/repo.maven.apache.org/maven2/")) { "https${it.groupValues[1]}/example.com/repository/maven-central/" })
+                }
+            }
+            Files.copy(tmpMavenInstall, mavenInstall, StandardCopyOption.REPLACE_EXISTING)
+            Files.delete(tmpMavenInstall)
+        }
+
+        build("rehashMavenInstall")
+        assertThat(Files.exists(mavenInstall)).isTrue()
+        assertThat(objectMapper.readTree(Files.readString(mavenInstall))).isEqualTo(
+            objectMapper.readTree(
+                BazelDependenciesPluginTest::class.java.getResource("/rehashed_maven_install_5.0_format.json")!!
                     .readText()
             )
         )

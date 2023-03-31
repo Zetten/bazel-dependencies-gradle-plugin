@@ -31,61 +31,87 @@ open class RehashMavenInstall : DefaultTask() {
     fun rehashMavenInstall() {
         val target = mavenInstallJsonFile.get()
 
-        val mavenInstall = MavenInstallJson.from(target)
-
-        mavenInstall.copy(
-            dependencyTree =
-            if (rulesJvmExternalVersion.get() >= SemVer(4, 3)) {
-                // Parse the inputs from our java_repositories.bzl file - this could get messy if it's been modified, but it'll do for most cases
-                val inputs = javaRepositoriesBzlFile.get().readText()
-                val dependencies =
-                    Regex(
-                        "^\\s+maven.artifact\\(" +
-                                "\"(?<group>[^\"]*)\", " +
-                                "\"(?<artifact>[^\"]*)\", " +
-                                "\"(?<version>[^\"]*)\"" +
-                                "(, packaging = \"(?<packaging>[^\"]*)\")?" +
-                                "(, classifier = \"(?<classifier>[^\"]*)\")?" +
-                                "(, override_license_types = \\[(?<overrideLicenseTypes>[^]]*)])?" +
-                                "(, exclusions = \\[(?<exclusions>.*)])?" +
-                                "(, neverlink = (?<neverlink>\\w*))?" +
-                                "(, testonly = (?<testonly>\\w*))?" +
-                                "\\),$", RegexOption.MULTILINE
-                    ).findAll(inputs).map {
-                        (it.groups as MatchNamedGroupCollection).let { groups ->
-                            MavenSpec(
-                                groups["group"]!!.value,
-                                groups["artifact"]!!.value,
-                                groups["version"]!!.value,
-                                packaging = groups["packaging"]?.value,
-                                classifier = groups["classifier"]?.value,
-                                overrideLicenseTypes = groups["overrideLicenseTypes"]?.value?.split(", ")
-                                    ?.map { s -> s.removeSurrounding("\"") },
-                                neverlink = groups["neverlink"]?.value,
-                                testonly = groups["testonly"]?.value,
-                            )
-                        }
-                    }.toList()
-                val repositories =
-                    Regex("^\\s+\"(.*)\",$", RegexOption.MULTILINE).findAll(inputs).map { it.groupValues[1] }.toList()
-
-                mavenInstall.dependencyTree.copy(
-                    inputArtifactsHash = computeDependencyInputsSignature(
-                        rulesJvmExternalVersion.get(),
-                        dependencies,
-                        repositories
-                    ),
-                    resolvedArtifactsHash = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
-                )
-            } else if (rulesJvmExternalVersion.get() >= SemVer(4, 1)) {
-                mavenInstall.dependencyTree.copy(
-                    resolvedArtifactsHash = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
-                )
+        val mavenInstallContents: Any =
+            if (rulesJvmExternalVersion.get() >= SemVer(5, 0)) {
+                updateMavenInstallJsonV2(MavenInstallJsonV2Contents.from(target))
             } else {
-                mavenInstall.dependencyTree.copy(
-                    oldDependencyTreeSignature = computeDependencyTreeSignature(mavenInstall.dependencyTree.dependencies)
-                )
+                updateMavenInstallJsonV1(MavenInstallJsonV1Contents.from(target))
             }
-        ).write(target)
+
+        objectMapper.writeValue(mavenInstallJsonFile.get(), mavenInstallContents)
+    }
+
+    private fun updateMavenInstallJsonV2(it: MavenInstallJsonV2Contents): MavenInstallJsonV2Contents {
+        val javaRepositoriesBzl = parseJavaRepositoriesBzl()
+
+        return it.copy(
+            inputArtifactsHash = computeDependencyInputsSignature(
+                rulesJvmExternalVersion.get(),
+                javaRepositoriesBzl.dependencies,
+                javaRepositoriesBzl.repositories
+            ),
+            resolvedArtifactsHash = it.computeResolvedArtifactsHash()
+        )
+    }
+
+    private fun updateMavenInstallJsonV1(it: MavenInstallJsonV1Contents) = it.copy(
+        dependencyTree = if (rulesJvmExternalVersion.get() >= SemVer(4, 3)) {
+            val javaRepositoriesBzl = parseJavaRepositoriesBzl()
+            it.dependencyTree.copy(
+                inputArtifactsHash = computeDependencyInputsSignature(
+                    rulesJvmExternalVersion.get(),
+                    javaRepositoriesBzl.dependencies,
+                    javaRepositoriesBzl.repositories
+                ),
+                resolvedArtifactsHash = computeDependencyTreeSignature(it.dependencyTree.dependencies)
+            )
+        } else if (rulesJvmExternalVersion.get() >= SemVer(4, 1)) {
+            it.dependencyTree.copy(resolvedArtifactsHash = computeDependencyTreeSignature(it.dependencyTree.dependencies))
+        } else {
+            it.dependencyTree.copy(oldDependencyTreeSignature = computeDependencyTreeSignature(it.dependencyTree.dependencies))
+        }
+    )
+
+    private fun parseJavaRepositoriesBzl(): JavaRepositoriesBzl {
+        // Parse the inputs from our java_repositories.bzl file - this could get messy if it's been modified, but it'll do for most cases
+        val inputs = javaRepositoriesBzlFile.get().readText()
+        val dependencies =
+            Regex(
+                "^\\s+maven.artifact\\(" +
+                        "\"(?<group>[^\"]*)\", " +
+                        "\"(?<artifact>[^\"]*)\", " +
+                        "\"(?<version>[^\"]*)\"" +
+                        "(, packaging = \"(?<packaging>[^\"]*)\")?" +
+                        "(, classifier = \"(?<classifier>[^\"]*)\")?" +
+                        "(, override_license_types = \\[(?<overrideLicenseTypes>[^]]*)])?" +
+                        "(, exclusions = \\[(?<exclusions>.*)])?" +
+                        "(, neverlink = (?<neverlink>\\w*))?" +
+                        "(, testonly = (?<testonly>\\w*))?" +
+                        "\\),$", RegexOption.MULTILINE
+            ).findAll(inputs).map {
+                (it.groups as MatchNamedGroupCollection).let { groups ->
+                    MavenSpec(
+                        groups["group"]!!.value,
+                        groups["artifact"]!!.value,
+                        groups["version"]!!.value,
+                        packaging = groups["packaging"]?.value,
+                        classifier = groups["classifier"]?.value,
+                        overrideLicenseTypes = groups["overrideLicenseTypes"]?.value?.split(", ")
+                            ?.map { s -> s.removeSurrounding("\"") },
+                        neverlink = groups["neverlink"]?.value,
+                        testonly = groups["testonly"]?.value,
+                    )
+                }
+            }.toList()
+        val repositories =
+            Regex("^\\s+\"(.*)\",$", RegexOption.MULTILINE).findAll(inputs).map { it.groupValues[1] }
+                .toList()
+
+        return JavaRepositoriesBzl(dependencies, repositories)
     }
 }
+
+data class JavaRepositoriesBzl(
+    val dependencies: List<MavenSpec>,
+    val repositories: List<String>
+)

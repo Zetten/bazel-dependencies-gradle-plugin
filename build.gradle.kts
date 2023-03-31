@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     `java-gradle-plugin`
     `kotlin-dsl`
@@ -5,7 +7,7 @@ plugins {
 }
 
 group = "com.github.zetten"
-version = "2.2.1"
+version = "2.3.0"
 
 description = """
 Generate Bazel Java dependency rules from Gradle project configuration
@@ -18,9 +20,9 @@ repositories {
 
 dependencies {
     implementation("com.github.jk1:gradle-license-report:2.1")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.13.2")
-    implementation("com.fasterxml.jackson.core:jackson-annotations:2.13.2")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.13.5")
+    implementation("com.fasterxml.jackson.core:jackson-annotations:2.13.5")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.5")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
     testImplementation("com.google.truth:truth:1.1.3")

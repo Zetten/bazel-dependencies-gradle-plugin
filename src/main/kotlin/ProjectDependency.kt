@@ -3,10 +3,15 @@ package com.github.zetten.bazeldeps
 import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.Serializable
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Arrays
+import java.util.stream.Collectors
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 
 private val logger: Logger = LoggerFactory.getLogger(ProjectDependency::class.java)
 
@@ -88,17 +93,13 @@ data class ProjectDependency(
         return result
     }
 
-    fun findArtifactUrls(repositories: List<String> = emptyList()): List<String> {
-        return repositories.mapNotNull {
-            val artifactUrl = "${getArtifactUrl(getMavenIdentifier(), it)}.${jar!!.extension}"
-            val code = with(URL(artifactUrl).openConnection() as HttpURLConnection) {
-                requestMethod = "HEAD"
-                connect()
-                responseCode
-            }
-            logger.debug("Received ${code} for artifact at ${artifactUrl}")
-            if (code in 100..399) artifactUrl else null
-        }
+    fun findArtifactRepositories(repositories: List<String> = emptyList()): List<String> = repositories.filter {
+        artifactExists("${getArtifactUrl(getMavenIdentifier(), it)}.${jar!!.extension}")
+    }
+
+    fun findArtifactUrls(repositories: List<String> = emptyList()): List<String> = repositories.mapNotNull {
+        val artifactUrl = "${getArtifactUrl(getMavenIdentifier(), it)}.${jar!!.extension}"
+        if (artifactExists(artifactUrl)) artifactUrl else null
     }
 
     internal fun getArtifactUrl(repoUrl: String) = getArtifactUrl(getMavenIdentifier(), repoUrl)
@@ -121,5 +122,53 @@ data class ProjectDependency(
             version,
             "${artifact}-${file_version}"
         ).joinToString("/")
+    }
+
+    private fun artifactExists(artifactUrl: String): Boolean {
+        val code = with(URL(artifactUrl).openConnection() as HttpURLConnection) {
+            requestMethod = "HEAD"
+            connect()
+            responseCode
+        }
+        logger.debug("Received $code for artifact at $artifactUrl")
+        return code in (100..399)
+    }
+
+    internal fun computeDependencyPackages(): Set<String> {
+        if (this.jar == null) return emptySet()
+
+        val packages = mutableSetOf<String>()
+        ZipInputStream(BufferedInputStream(jar.inputStream())).use { zis ->
+            var entry: ZipEntry?
+            while (zis.nextEntry.also { entry = it } != null) {
+                val entryName = entry!!.name
+                if (!entryName.endsWith(".class")) {
+                    continue
+                }
+                if ("module-info.class" == entryName || entryName.endsWith("/module-info.class")) {
+                    continue
+                }
+                packages.add(extractPackageName(entryName))
+            }
+        }
+        return packages
+    }
+
+    private fun extractPackageName(zipEntryName: String): String {
+        val parts = zipEntryName.split("/".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
+        if (parts.size == 1) {
+            return ""
+        }
+        var skip = 0L
+        // As per https://docs.oracle.com/en/java/javase/13/docs/specs/jar/jar.html
+        if (parts.size > 3 && "META-INF" == parts[0] && "versions" == parts[1] &&
+            "[1-9][0-9]*".toRegex().matches(parts[2])
+        ) {
+            skip = 3
+        }
+
+        // -1 for the class name, -skip for the skipped META-INF prefix.
+        val limit = parts.size - 1 - skip
+        return Arrays.stream(parts).skip(skip).limit(limit).collect(Collectors.joining("."));
     }
 }

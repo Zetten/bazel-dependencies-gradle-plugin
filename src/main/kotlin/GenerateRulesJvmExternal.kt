@@ -11,7 +11,6 @@ import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
 import net.swiftzer.semver.SemVer
 import org.gradle.api.DefaultTask
-import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.SetProperty
@@ -19,22 +18,12 @@ import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
-import org.gradle.internal.hash.Hashing
 import org.gradle.kotlin.dsl.listProperty
 import org.gradle.kotlin.dsl.property
 import org.gradle.kotlin.dsl.setProperty
-import org.gradle.workers.WorkAction
-import org.gradle.workers.WorkParameters
 import org.gradle.workers.WorkerExecutor
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
-import java.io.BufferedInputStream
 import java.io.File
-import java.util.Arrays
 import java.util.SortedMap
-import java.util.stream.Collectors
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 import javax.inject.Inject
 
 
@@ -42,7 +31,7 @@ private val indenter = DefaultIndenter()
 private val prettyPrinter = DefaultPrettyPrinter()
     .withArrayIndenter(indenter)
     .withObjectIndenter(indenter)
-private val objectMapper = JsonMapper.builder()
+val objectMapper: JsonMapper = JsonMapper.builder()
     .enable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)
     .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
     .enable(SerializationFeature.INDENT_OUTPUT)
@@ -95,46 +84,25 @@ open class GenerateRulesJvmExternal @Inject constructor(private val workerExecut
         )
 
         if (createMavenInstallJson.get()) {
-            val snippetFiles = sortedDependencies
-                .flatMap {
-                    if (it.srcJar != null) {
-                        listOf(
-                            it,
-                            it.copy(
-                                classifier = "sources",
-                                jar = it.srcJar,
-                                dependencies = it.dependencies.map { it.copy(classifier = "sources") }.toSet(),
-                                allDependencies = it.allDependencies.map { it.copy(classifier = "sources") }.toSet()
-                            )
-                        )
-                    } else {
-                        listOf(it)
-                    }
-                }
-                .map { dependency ->
-                    val snippetFile = temporaryDir.resolve("${dependency.getBazelIdentifier()}.maven_install.snippet")
-                    workerExecutor.noIsolation().submit(GenerateDependencyTreeSnippet::class.java) {
-                        getOutputFile().set(snippetFile)
-                        getDependency().set(dependency)
-                        getRepositories().set(sortedRepositories)
-                        getRulesJvmExternalVersion().set(rulesJvmExternalVersion.get())
-                    }
-                    snippetFile
-                }
-
-            workerExecutor.await()
-
-            // read all snippet files back to objects so we can compute the
-            // checksums and emit the complete maven_install.json
-            val dependencyTreeEntries: List<DependencyTreeEntry> = snippetFiles.map(objectMapper::readValue)
-            val mavenInstallJson =
-                MavenInstallJson(
-                    rulesJvmExternalVersion.get(),
+            val contents: Any
+            if (rulesJvmExternalVersion.get() >= SemVer(5, 0)) {
+                contents = MavenInstallJsonV2(
+                    workerExecutor,
+                    rulesJvmExternalVersion,
+                    temporaryDir,
                     sortedDependencies,
-                    dependencyTreeEntries,
                     sortedRepositories
-                )
-            mavenInstallJson.write(mavenInstallJsonFile.get())
+                ).contents
+            } else {
+                contents = MavenInstallJsonV1(
+                    workerExecutor,
+                    rulesJvmExternalVersion,
+                    temporaryDir,
+                    sortedDependencies,
+                    sortedRepositories
+                ).contents
+            }
+            objectMapper.writeValue(mavenInstallJsonFile.get(), contents)
         }
     }
 
@@ -151,169 +119,6 @@ open class GenerateRulesJvmExternal @Inject constructor(private val workerExecut
         return """
         |    maven.artifact(${params.joinToString(", ")}),
         """.trimMargin()
-    }
-}
-
-interface DependencyTreeMapperParams : WorkParameters {
-    fun getOutputFile(): RegularFileProperty
-    fun getDependency(): Property<ProjectDependency>
-    fun getRepositories(): ListProperty<String>
-    fun getRulesJvmExternalVersion(): Property<SemVer>
-}
-
-abstract class GenerateDependencyTreeSnippet : WorkAction<DependencyTreeMapperParams> {
-    private val logger: Logger = LoggerFactory.getLogger(GenerateDependencySnippet::class.java)
-
-    override fun execute() {
-        val outputFile = parameters.getOutputFile().asFile.get()
-        val dependency = parameters.getDependency().get()
-        val repositories = parameters.getRepositories().get()
-        val rulesJvmExternalVersion = parameters.getRulesJvmExternalVersion().get()
-
-        logger.info("Generating rules_jvm_external dependency tree snippet for ${dependency.id}")
-
-        val urls = dependency.findArtifactUrls(repositories)
-        val dependencyTreeEntry = DependencyTreeEntry(
-            coord = dependency.getJvmMavenImportExternalCoordinates(),
-            directDependencies = dependency.dependencies.map { it.getJvmMavenImportExternalCoordinates() }.sorted(),
-            dependencies = dependency.allDependencies.map { it.getJvmMavenImportExternalCoordinates() }.sorted(),
-            url = urls.first(),
-            mirrorUrls = urls,
-            packages = if (rulesJvmExternalVersion >= SemVer(4, 3))
-                computeDependencyPackages(dependency.jar!!).sorted() else null,
-            sha256 = Hashing.sha256().hashFile(dependency.jar!!).toZeroPaddedString(64),
-            file = "v1/${urls.first().replace("://", "/")}"
-        )
-        objectMapper.writeValue(outputFile, dependencyTreeEntry)
-    }
-
-    private fun computeDependencyPackages(jar: File): Set<String> {
-        val packages = mutableSetOf<String>()
-        ZipInputStream(BufferedInputStream(jar.inputStream())).use { zis ->
-            var entry: ZipEntry?
-            while (zis.nextEntry.also { entry = it } != null) {
-                val entryName = entry!!.name
-                if (!entryName.endsWith(".class")) {
-                    continue
-                }
-                if ("module-info.class" == entryName || entryName.endsWith("/module-info.class")) {
-                    continue
-                }
-                packages.add(extractPackageName(entryName))
-            }
-        }
-        return packages
-    }
-
-    private fun extractPackageName(zipEntryName: String): String {
-        val parts = zipEntryName.split("/".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
-        if (parts.size == 1) {
-            return ""
-        }
-        var skip = 0L
-        // As per https://docs.oracle.com/en/java/javase/13/docs/specs/jar/jar.html
-        if (parts.size > 3 && "META-INF" == parts[0] && "versions" == parts[1] &&
-            "[1-9][0-9]*".toRegex().matches(parts[2])
-        ) {
-            skip = 3
-        }
-
-        // -1 for the class name, -skip for the skipped META-INF prefix.
-        val limit = parts.size - 1 - skip
-        return Arrays.stream(parts).skip(skip).limit(limit).collect(Collectors.joining("."));
-    }
-}
-
-data class DependencyTreeEntry(
-    @JsonProperty("coord") val coord: String,
-    @JsonProperty("file") val file: String? = null,
-    @JsonProperty("directDependencies") val directDependencies: List<String> = emptyList(),
-    @JsonProperty("dependencies") val dependencies: List<String> = emptyList(),
-    @JsonProperty("url") val url: String,
-    @JsonProperty("mirror_urls") val mirrorUrls: List<String> = emptyList(),
-    @JsonProperty("packages") @JsonInclude(JsonInclude.Include.NON_NULL) val packages: List<String>? = null,
-    @JsonProperty("sha256") val sha256: String
-)
-
-data class MavenInstallJson(
-    @JsonProperty("dependency_tree") val dependencyTree: DependencyTree,
-) {
-    constructor(
-        rulesJvmExternalSemVer: SemVer,
-        dependencies: List<ProjectDependency>,
-        dependencyTreeEntries: List<DependencyTreeEntry>,
-        repositories: List<String>
-    ) : this(
-        // old rules_jvm_external versions use a different checksum attribute
-        if (rulesJvmExternalSemVer < SemVer(4, 1)) {
-            DependencyTree(
-                dependencies = dependencyTreeEntries,
-                oldDependencyTreeSignature = computeDependencyTreeSignature(dependencyTreeEntries)
-            )
-        } else {
-            DependencyTree(
-                dependencies = dependencyTreeEntries,
-                resolvedArtifactsHash = computeDependencyTreeSignature(dependencyTreeEntries),
-                inputArtifactsHash = computeDependencyInputsSignature(
-                    rulesJvmExternalSemVer,
-                    dependencies.map { MavenSpec(it) },
-                    repositories
-                )
-            )
-        }
-    )
-
-    companion object Factory {
-        fun from(file: File): MavenInstallJson = objectMapper.readValue(file)
-    }
-
-    fun write(file: File) = objectMapper.writeValue(file, this)
-}
-
-data class DependencyTree(
-    @JsonProperty("__AUTOGENERATED_FILE_DO_NOT_MODIFY_THIS_FILE_MANUALLY") val oldDependencyTreeSignature: Any = "THERE_IS_NO_DATA_ONLY_ZUUL",
-    @JsonProperty("__INPUT_ARTIFACTS_HASH") @JsonInclude(JsonInclude.Include.NON_NULL) val inputArtifactsHash: Int? = null,
-    @JsonProperty("__RESOLVED_ARTIFACTS_HASH") @JsonInclude(JsonInclude.Include.NON_NULL) val resolvedArtifactsHash: Int? = null,
-    @JsonProperty("conflict_resolution") val conflictResolution: Map<String, String> = emptyMap(),
-    @JsonProperty("dependencies") val dependencies: List<DependencyTreeEntry>,
-    @JsonProperty("version") val version: String = "0.1.0"
-)
-
-// Implementation of https://github.com/bazelbuild/rules_jvm_external/blob/030ea9ef8e4ea491fed13de1771e225eb5a52d18/coursier.bzl#L120
-internal fun computeDependencyTreeSignature(dependencies: List<DependencyTreeEntry>): Int {
-    val signatureInputs: List<String> = dependencies.map { dep ->
-        var uniq = arrayOf(dep.coord)
-        if (dep.file != null) {
-            uniq += dep.sha256
-            uniq += dep.file
-            uniq += dep.url
-        }
-        if (dep.dependencies.isNotEmpty()) {
-            uniq += dep.dependencies.joinToString(",")
-        }
-        uniq.joinToString(":")
-    }
-    val signatureString = "[${signatureInputs.sorted().joinToString(", ") { "\"$it\"" }}]"
-    return signatureString.hashCode()
-}
-
-// Implementation of https://github.com/bazelbuild/rules_jvm_external/blob/8feca27d7efed5a3343f8dbfe1199987598ca778/coursier.bzl#L205
-internal fun computeDependencyInputsSignature(
-    rulesJvmExternalSemVer: SemVer,
-    dependencies: List<MavenSpec>,
-    repositories: List<String>
-): Int {
-    val signatureInputs = dependencies.map { dep ->
-        val depAttrs: SortedMap<String, Any> = objectMapper.readValue(objectMapper.writeValueAsBytes(dep))
-        depAttrs.entries.joinToString(":") { "${it.key}=${it.value}" }
-    }
-    val artifactsString = "[${signatureInputs.sorted().joinToString(", ") { "\"$it\"" }}]"
-
-    return if (rulesJvmExternalSemVer >= SemVer(4, 3)) {
-        val repositoriesString = "[${repositories.joinToString(", ") { "\"{ \\\"repo_url\\\": \\\"$it\\\" }\"" }}]"
-        artifactsString.hashCode() xor repositoriesString.hashCode()
-    } else {
-        artifactsString.hashCode()
     }
 }
 
@@ -345,3 +150,23 @@ data class MavenExclusionSpec(
     @JsonProperty("group") val group: String,
     @JsonProperty("artifact") val artifact: String,
 )
+
+// Implementation of https://github.com/bazelbuild/rules_jvm_external/blob/8feca27d7efed5a3343f8dbfe1199987598ca778/coursier.bzl#L205
+internal fun computeDependencyInputsSignature(
+    rulesJvmExternalSemVer: SemVer,
+    dependencies: List<MavenSpec>,
+    repositories: List<String>
+): Int {
+    val signatureInputs = dependencies.map { dep ->
+        val depAttrs: SortedMap<String, Any> = objectMapper.readValue(objectMapper.writeValueAsBytes(dep))
+        depAttrs.entries.joinToString(":") { "${it.key}=${it.value}" }
+    }
+    val artifactsString = "[${signatureInputs.sorted().joinToString(", ") { "\"$it\"" }}]"
+
+    return if (rulesJvmExternalSemVer >= SemVer(4, 3)) {
+        val repositoriesString = "[${repositories.joinToString(", ") { "\"{ \\\"repo_url\\\": \\\"$it\\\" }\"" }}]"
+        artifactsString.hashCode() xor repositoriesString.hashCode()
+    } else {
+        artifactsString.hashCode()
+    }
+}

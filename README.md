@@ -72,6 +72,10 @@ Features:
 * Version 2.1.0 supports Gradle &ge; 7.4, and supports more
   flexible `compileOnly`/`testOnly` matching by optionally omitting dependency
   versions.
+* Version 2.2.1 adds support for the new lockfile hashing  in rules_jvm_external
+  version 4.3.
+* Version 2.3.0 adds support for the new lockfile format in rules_jvm_external
+  version 5.0.
 
 ## Usage
 
