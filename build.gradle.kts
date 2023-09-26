@@ -4,6 +4,7 @@ plugins {
     `java-gradle-plugin`
     `kotlin-dsl`
     id("com.gradle.plugin-publish") version "0.15.0"
+    id("org.sonarqube") version "4.3.1.3277"
 }
 
 group = "com.github.zetten"
@@ -48,4 +49,12 @@ gradlePlugin {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+sonar {
+    properties {
+        property("sonar.projectKey", "Zetten_bazel-dependencies-gradle-plugin")
+        property("sonar.organization", "zetten")
+        property("sonar.host.url", "https://sonarcloud.io")
+    }
 }
