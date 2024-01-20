@@ -1,14 +1,17 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+val guavaVersion = "33.0.0-jre"
+val jacksonVersion = "2.16.1"
+val junitVersion = "5.10.1"
+val truthVersion = "1.2.0"
 
 plugins {
     `java-gradle-plugin`
     `kotlin-dsl`
-    id("com.gradle.plugin-publish") version "0.15.0"
-    id("org.sonarqube") version "4.3.1.3277"
+    id("com.gradle.plugin-publish") version "1.2.1"
+    id("org.sonarqube") version "4.4.1.3373"
 }
 
 group = "com.github.zetten"
-version = "2.3.0"
+version = "3.0.0"
 
 description = """
 Generate Bazel Java dependency rules from Gradle project configuration
@@ -20,28 +23,29 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.jk1:gradle-license-report:2.1")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.13.5")
-    implementation("com.fasterxml.jackson.core:jackson-annotations:2.13.5")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.5")
+    implementation(platform("com.fasterxml.jackson:jackson-bom:${jacksonVersion}"))
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
-    testImplementation("com.google.truth:truth:1.1.3")
-}
+    implementation("com.google.guava:guava:${guavaVersion}")
+    implementation("com.fasterxml.jackson.core:jackson-databind")
+    implementation("com.fasterxml.jackson.core:jackson-annotations")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
 
-pluginBundle {
-    // please change these URLs to point to your own website/repository
-    website = "https://github.com/Zetten/bazel-dependencies-gradle-plugin"
-    vcsUrl = "https://github.com/Zetten/bazel-dependencies-gradle-plugin"
-    tags = listOf("bazel", "dependencies", "compatibility")
+    testImplementation(platform("org.junit:junit-bom:${junitVersion}"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("com.google.truth:truth:${truthVersion}")
 }
 
 gradlePlugin {
+    website = "https://github.com/Zetten/bazel-dependencies-gradle-plugin"
+    vcsUrl = "https://github.com/Zetten/bazel-dependencies-gradle-plugin"
+
     plugins {
-        register("bazelDependenciesPlugin") {
+        create("bazelDependenciesPlugin") {
             id = "com.github.zetten.bazel-dependencies-plugin"
             displayName = "Generate Bazel Java dependency rules from Gradle project configuration"
-            description = "A Gradle plugin that allows the generation of Bazel repository rules from Gradle project dependency configuration"
+            description =
+                "A Gradle plugin that allows the generation of Bazel repository rules from Gradle project dependency configuration"
+            tags = listOf("bazel", "dependencies", "compatibility")
             implementationClass = "com.github.zetten.bazeldeps.BazelDependenciesPlugin"
         }
     }

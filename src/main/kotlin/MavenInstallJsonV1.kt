@@ -11,10 +11,7 @@ import org.gradle.internal.hash.Hashing
 import org.gradle.workers.WorkAction
 import org.gradle.workers.WorkParameters
 import org.gradle.workers.WorkerExecutor
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.SortedMap
 
 class MavenInstallJsonV1(
     workerExecutor: WorkerExecutor,
@@ -26,27 +23,37 @@ class MavenInstallJsonV1(
     internal val contents: MavenInstallJsonV1Contents
 
     init {
+        val keyedDependencies = sortedDependencies.associateBy(ProjectDependency::id)
         val snippetFiles = sortedDependencies
-            .flatMap {
-                if (it.srcJar != null) {
+            .flatMap { dep ->
+                val transitiveDependencies = dep.computeTransitiveDependencyClosure(keyedDependencies)
+                if (dep.srcJar != null) {
                     listOf(
-                        it,
-                        it.copy(
-                            classifier = "sources",
-                            jar = it.srcJar,
-                            dependencies = it.dependencies.map { it.copy(classifier = "sources") }.toSet(),
-                            allDependencies = it.allDependencies.map { it.copy(classifier = "sources") }.toSet()
+                        Pair(dep, transitiveDependencies),
+                        Pair(
+                            dep.copy(
+                                id = dep.id.copy(classifier = "sources"),
+                                jar = dep.srcJar,
+                                dependencies = dep.dependencies
+                                    .filter { depDep -> sortedDependencies.any { it.id == depDep && it.srcJar != null } }
+                                    .map { depDep -> depDep.copy(classifier = "sources") }.toSet(),
+                            ),
+                            transitiveDependencies
+                                .filter { depDep -> sortedDependencies.any { it.id == depDep && it.srcJar != null } }
+                                .map { depDep -> depDep.copy(classifier = "sources") }.toSet()
                         )
                     )
                 } else {
-                    listOf(it)
+                    listOf(Pair(dep, transitiveDependencies))
                 }
             }
-            .map { dependency ->
+            .map {
+                val dependency = it.first
                 val snippetFile = temporaryDir.resolve("${dependency.getBazelIdentifier()}.maven_install.snippet")
-                workerExecutor.noIsolation().submit(GenerateDependencyTreeSnippet::class.java) {
+                workerExecutor.noIsolation().submit(GenerateMavenInstallV1Snippet::class.java) {
                     getOutputFile().set(snippetFile)
                     getDependency().set(dependency)
+                    getTransitiveDependencies().set(it.second)
                     getRepositories().set(sortedRepositories)
                     getRulesJvmExternalVersion().set(rulesJvmExternalVersion.get())
                 }
@@ -89,7 +96,7 @@ data class MavenInstallJsonV1Contents(
                 resolvedArtifactsHash = computeDependencyTreeSignature(dependencyTreeEntries),
                 inputArtifactsHash = computeDependencyInputsSignature(
                     rulesJvmExternalSemVer,
-                    dependencies.map { MavenSpec(it) },
+                    dependencies,
                     repositories
                 )
             )
@@ -101,29 +108,27 @@ data class MavenInstallJsonV1Contents(
     }
 }
 
-interface DependencyTreeMapperParams : WorkParameters {
+interface GenerateMavenInstallV1SnippetParams : WorkParameters {
     fun getOutputFile(): RegularFileProperty
     fun getDependency(): Property<ProjectDependency>
+    fun getTransitiveDependencies(): ListProperty<ArtifactIdentifier>
     fun getRepositories(): ListProperty<String>
     fun getRulesJvmExternalVersion(): Property<SemVer>
 }
 
-abstract class GenerateDependencyTreeSnippet : WorkAction<DependencyTreeMapperParams> {
-    private val logger: Logger = LoggerFactory.getLogger(GenerateDependencySnippet::class.java)
-
+abstract class GenerateMavenInstallV1Snippet : WorkAction<GenerateMavenInstallV1SnippetParams> {
     override fun execute() {
         val outputFile = parameters.getOutputFile().asFile.get()
         val dependency = parameters.getDependency().get()
+        val transitiveDependencies = parameters.getTransitiveDependencies().get()
         val repositories = parameters.getRepositories().get()
         val rulesJvmExternalVersion = parameters.getRulesJvmExternalVersion().get()
 
-        logger.info("Generating rules_jvm_external dependency tree snippet for ${dependency.id}")
-
         val urls = dependency.findArtifactUrls(repositories)
         val dependencyTreeEntry = DependencyTreeEntry(
-            coord = dependency.getJvmMavenImportExternalCoordinates(),
-            directDependencies = dependency.dependencies.map { it.getJvmMavenImportExternalCoordinates() }.sorted(),
-            dependencies = dependency.allDependencies.map { it.getJvmMavenImportExternalCoordinates() }.sorted(),
+            coord = dependency.id.getRulesJvmExternalCoordinates(),
+            directDependencies = dependency.dependencies.map { it.getRulesJvmExternalCoordinates() }.sorted(),
+            dependencies = transitiveDependencies.map { it.getRulesJvmExternalCoordinates() }.sorted(),
             url = urls.first(),
             mirrorUrls = urls,
             packages = if (rulesJvmExternalVersion >= SemVer(4, 3)) dependency.computeDependencyPackages()
@@ -154,21 +159,3 @@ data class DependencyTree(
     @JsonProperty("dependencies") val dependencies: List<DependencyTreeEntry>,
     @JsonProperty("version") val version: String = "0.1.0"
 )
-
-// Implementation of https://github.com/bazelbuild/rules_jvm_external/blob/030ea9ef8e4ea491fed13de1771e225eb5a52d18/coursier.bzl#L120
-internal fun computeDependencyTreeSignature(dependencies: List<DependencyTreeEntry>): Int {
-    val signatureInputs: List<String> = dependencies.map { dep ->
-        var uniq = arrayOf(dep.coord)
-        if (dep.file != null) {
-            uniq += dep.sha256
-            uniq += dep.file
-            uniq += dep.url
-        }
-        if (dep.dependencies.isNotEmpty()) {
-            uniq += dep.dependencies.joinToString(",")
-        }
-        uniq.joinToString(":")
-    }
-    val signatureString = "[${signatureInputs.sorted().joinToString(", ") { "\"$it\"" }}]"
-    return signatureString.hashCode()
-}

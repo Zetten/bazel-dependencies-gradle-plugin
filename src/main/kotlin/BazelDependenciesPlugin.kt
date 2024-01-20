@@ -1,155 +1,218 @@
 package com.github.zetten.bazeldeps
 
-import com.github.jk1.license.LicenseReportExtension
-import com.github.jk1.license.filter.LicenseBundleNormalizer
-import com.github.jk1.license.reader.CachedModuleReader
-import com.github.jk1.license.reader.ConfigurationReader
+import com.google.common.graph.Graphs
+import com.google.common.graph.MutableNetwork
+import com.google.common.graph.NetworkBuilder
 import net.swiftzer.semver.SemVer
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ExternalModuleDependency
 import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
-import org.gradle.api.model.ObjectFactory
-import org.gradle.api.provider.MapProperty
-import org.gradle.api.provider.Property
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.attributes.AttributeContainer
+import org.gradle.api.attributes.Usage
 import org.gradle.api.provider.Provider
-import org.gradle.api.provider.SetProperty
 import org.gradle.jvm.JvmLibrary
 import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.get
+import org.gradle.kotlin.dsl.findByType
 import org.gradle.kotlin.dsl.getArtifacts
-import org.gradle.kotlin.dsl.mapProperty
-import org.gradle.kotlin.dsl.property
-import org.gradle.kotlin.dsl.setProperty
+import org.gradle.kotlin.dsl.named
+import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withArtifacts
 import org.gradle.language.base.artifact.SourcesArtifact
 import java.io.File
 
+fun reconcileAttribute(container: AttributeContainer, attribute: Attribute<*>): Pair<Attribute<*>, *> =
+    Pair(attribute, container.getAttribute(attribute)!!)
+
+fun <T> AttributeContainer.foo(key: Attribute<T>): Pair<Attribute<T>, T?> = Pair(key, this.getAttribute(key))
+
+
 class BazelDependenciesPlugin : Plugin<Project> {
-    override fun apply(project: Project): Unit = project.run {
-        extensions.create("bazelDependencies", BazelDependencies::class)
+    override fun apply(target: Project): Unit = target.run {
+        extensions.create<BazelDependenciesExtension>("bazelDependencies")
 
-        val bazelDependencies = extensions.findByName("bazelDependencies") as BazelDependencies
-
-        if (!plugins.hasPlugin("com.github.jk1.dependency-license-report")) {
-            plugins.apply("com.github.jk1.dependency-license-report")
-            (extensions["licenseReport"] as LicenseReportExtension).run {
-                filters = arrayOf(LicenseBundleNormalizer())
-            }
-        }
+        val bazelDependenciesExtension = extensions.findByType<BazelDependenciesExtension>()!!
 
         val projectRepositories = project.provider {
             project.repositories.withType(MavenArtifactRepository::class.java).map { r -> r.url.toString() }
         }
-        val compileOnlyMatchers =
-            bazelDependencies.compileOnly.map { it.map { compileOnly -> ProjectDependencyMatcher.of(compileOnly) } }
-        val testOnlyMatchers =
-            bazelDependencies.testOnly.map { it.map { testOnly -> ProjectDependencyMatcher.of(testOnly) } }
-        val projectDependencies = projectDependencies(
-            project,
-            bazelDependencies.configuration,
-            bazelDependencies.sourcesChecksums,
-            compileOnlyMatchers,
-            testOnlyMatchers,
-        )
 
-        tasks.create("generateJvmMavenImportExternal", GenerateJvmMavenImportExternal::class) {
-            outputFile.set(bazelDependencies.outputFile)
-            dependencies.set(projectDependencies)
-            repositories.set(projectRepositories)
-            licenseData.set(
-                dependencyLicenseData(
+        val projectDependencies: Provider<Set<ProjectDependency>> =
+            bazelDependenciesExtension.configuration.map { configuration ->
+                // Resolve the different dependency scopes (api/compile/runtime) by creating new configurations
+                // with the same dependencies of the target configuration, but with different usage attributes.
+                val apiConfiguration = configuration.copy()
+                    .attributes { attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_API)) }
+                val runtimeConfiguration = configuration.copy()
+                    .attributes { attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME)) }
+
+                val apiDeps = apiConfiguration.resolvedConfiguration.firstLevelModuleDependencies
+                    .filter { it.moduleArtifacts.isNotEmpty() }
+                val runtimeDeps = runtimeConfiguration.resolvedConfiguration.firstLevelModuleDependencies
+                    .filter { it.moduleArtifacts.isNotEmpty() }
+
+                project.configurations.remove(apiConfiguration)
+                project.configurations.remove(runtimeConfiguration)
+
+                val dependencyGraph: MutableNetwork<DependencyGraphNode, DependencyGraphEdge> =
+                    NetworkBuilder.directed()
+                        .allowsSelfLoops(false)
+                        .allowsParallelEdges(true)
+                        .build();
+
+                val projectContext = ProjectContext(
                     project,
-                    bazelDependencies.configuration,
-                    projectDependencies,
-                    bazelDependencies.licenseOverrides
+                    configuration,
+                    neverlinkDeps = bazelDependenciesExtension.neverlink.get(),
+                    testonlyDeps = bazelDependenciesExtension.testonly.get()
                 )
-            )
-            strictLicenses.set(bazelDependencies.strictLicenses)
-            dependenciesAttr.set(bazelDependencies.dependenciesAttr)
-            safeSources.set(bazelDependencies.safeSources)
-        }
 
-        tasks.create("generateRulesJvmExternal", GenerateRulesJvmExternal::class) {
+                fun loadDep(artifact: ResolvedDependency, usage: DependencyUsage) {
+                    val thisNode = DependencyGraphNode(artifact, projectContext)
+                    artifact.children
+                        .filter { it.moduleArtifacts.isNotEmpty() && thisNode.exclusions.none { excludeRule -> excludeRule.group == it.moduleGroup && excludeRule.artifact == it.moduleName } }
+                        .forEach { dep ->
+                            val depNode = DependencyGraphNode(dep, projectContext)
+                            val dependencyGraphEdge = DependencyGraphEdge(
+                                ArtifactIdentifier.from(artifact),
+                                ArtifactIdentifier.from(dep),
+                                usage
+                            )
+                            if (dependencyGraph.addEdge(thisNode, depNode, dependencyGraphEdge)) {
+                                loadDep(dep, usage)
+                            }
+                        }
+                }
+
+                apiDeps.forEach { loadDep(it, DependencyUsage.API) }
+                runtimeDeps.forEach { loadDep(it, DependencyUsage.RUNTIME) }
+
+                if (Graphs.hasCycle(dependencyGraph)) {
+                    // TODO Find and print the cycle
+                    throw IllegalStateException("Dependency cycle detected; Bazel will not be able to load. Try adding an exclusion.")
+                }
+
+                dependencyGraph.nodes().map {
+                    val thisApiDeps =
+                        dependencyGraph.outEdges(it).filter { it.usage == DependencyUsage.API }.map { it.target }
+                    val thisRuntimeDeps =
+                        dependencyGraph.outEdges(it).filter { it.usage == DependencyUsage.RUNTIME }.map { it.target }
+
+                    val regularDeps = thisApiDeps intersect thisRuntimeDeps
+
+                    val id = ArtifactIdentifier(it.id, it.packaging, it.classifier)
+                    ProjectDependency(
+                        id = id,
+                        dependencies = regularDeps,
+                        runtimeOnlyDependencies = thisRuntimeDeps subtract regularDeps,
+                        compileOnlyDependencies = thisApiDeps subtract regularDeps,
+                        jar = it.jar,
+                        srcJar = it.srcJar,
+                        exclusions = it.exclusions,
+                        neverlink = it.neverlink,
+                        testonly = it.testonly,
+                    )
+                }.toSet()
+            }
+
+        tasks.register<GenerateJvmImportExternal>("generateJvmImportExternal") {
+            group = "build"
             dependencies.set(projectDependencies)
             repositories.set(projectRepositories)
-            createMavenInstallJson.set(bazelDependencies.createMavenInstallJson)
-            rulesJvmExternalVersion.set(bazelDependencies.rulesJvmExternalVersion.map { SemVer.parse(it) })
-            outputFile.set(bazelDependencies.outputFile)
-            mavenInstallJsonFile.set(bazelDependencies.outputFile.map { it.resolveSibling("maven_install.json") })
+            outputFile.set(bazelDependenciesExtension.outputFile)
+            createAggregatorRepo.set(bazelDependenciesExtension.jvmImportExternal.createAggregatorRepo)
         }
 
-        tasks.create("rehashMavenInstall", RehashMavenInstall::class) {
-            javaRepositoriesBzlFile.set(bazelDependencies.outputFile)
-            mavenInstallJsonFile.set(bazelDependencies.outputFile.map { it.resolveSibling("maven_install.json") })
-            rulesJvmExternalVersion.set(bazelDependencies.rulesJvmExternalVersion.map { SemVer.parse(it) })
+        val rulesJvmExternalVersionProvider =
+            bazelDependenciesExtension.rulesJvmExternal.version.map { SemVer.parse(it) }
+
+        tasks.register<GenerateRulesJvmExternal>("generateRulesJvmExternal") {
+            group = "build"
+            dependencies.set(projectDependencies)
+            repositories.set(projectRepositories)
+            projectExclusions.set(bazelDependenciesExtension.configuration.map { configuration ->
+                configuration.excludeRules.map { ProjectDependencyExclusion(it.group, it.module) }.toSet()
+            })
+            rulesJvmExternalVersion.set(rulesJvmExternalVersionProvider)
+            outputFile.set(bazelDependenciesExtension.outputFile)
+            mavenInstallJsonFile.set(
+                bazelDependenciesExtension.rulesJvmExternal.createMavenInstallJson.flatMap { createMavenInstallJson ->
+                    if (createMavenInstallJson) {
+                        project.layout.file(bazelDependenciesExtension.outputFile.map {
+                            it.asFile.resolveSibling("maven_install.json")
+                        })
+                    } else {
+                        project.objects.fileProperty()
+                    }
+                })
+        }
+
+        tasks.register<RehashMavenInstall>("rehashMavenInstall") {
+            group = "build"
+            javaRepositoriesBzlFile.set(bazelDependenciesExtension.outputFile)
+            mavenInstallJsonFile.set(
+                bazelDependenciesExtension.rulesJvmExternal.createMavenInstallJson.flatMap { createMavenInstallJson ->
+                    if (!createMavenInstallJson) {
+                        throw IllegalStateException("Rehashing maven_install.json requires createMavenInstallJson=true")
+                    }
+                    project.layout.file(bazelDependenciesExtension.outputFile.map {
+                        it.asFile.resolveSibling("maven_install.json")
+                    })
+                })
+            rulesJvmExternalVersion.set(rulesJvmExternalVersionProvider)
         }
     }
 }
 
-open class BazelDependencies(objects: ObjectFactory) {
-    val configuration: Property<Configuration> = objects.property()
-    val outputFile: Property<File> = objects.property()
-    var strictLicenses: Property<Boolean> = objects.property<Boolean>().convention(true)
-    var licenseOverrides: MapProperty<String, String> = objects.mapProperty()
-    var compileOnly: SetProperty<String> = objects.setProperty()
-    var testOnly: SetProperty<String> = objects.setProperty()
-    var dependenciesAttr: Property<String> = objects.property<String>().convention("exports")
-    var safeSources: Property<Boolean> = objects.property<Boolean>().convention(false)
-    var sourcesChecksums: Property<Boolean> = objects.property<Boolean>().convention(false)
-    var createMavenInstallJson: Property<Boolean> = objects.property<Boolean>().convention(true)
-    var rulesJvmExternalVersion: Property<String> = objects.property<String>().convention("4.0")
+private data class ProjectContext(
+    val project: Project,
+    val configuration: Configuration,
+    val neverlinkDeps: MutableSet<String>,
+    val testonlyDeps: MutableSet<String>,
+)
+
+private enum class DependencyUsage {
+    API, RUNTIME
 }
 
-fun projectDependencies(
-    project: Project,
-    configuration: Property<Configuration>,
-    sourcesChecksums: Property<Boolean>,
-    compileOnly: Provider<List<ProjectDependencyMatcher>>,
-    testOnly: Provider<List<ProjectDependencyMatcher>>
-): Provider<Set<ProjectDependency>> = project.provider {
-    configuration.get().resolvedConfiguration.firstLevelModuleDependencies
-        .filter { it.moduleArtifacts.isNotEmpty() }
-        .flatMap { walkDependencies(it, project, sourcesChecksums.get(), compileOnly.get(), testOnly.get()) }
-        .toHashSet()
+private data class DependencyGraphNode(
+    val id: ModuleVersionIdentifier,
+    val classifier: String?,
+    val jar: File,
+    val srcJar: File? = null,
+    val packaging: String = jar.extension,
+    val exclusions: Set<ProjectDependencyExclusion> = emptySet(),
+    val neverlink: Boolean = false,
+    val testonly: Boolean = false,
+) {
+    constructor(artifact: ResolvedDependency, projectContext: ProjectContext) :
+            this(
+                id = artifact.module.id,
+                classifier = artifact.moduleArtifacts.first().classifier,
+                jar = artifact.moduleArtifacts.first().file,
+                srcJar = findSrcJar(projectContext.project, artifact.module.id),
+                exclusions = projectContext.configuration.dependencies
+                    .filter { artifact.module.id.toString().startsWith("${it.group}:${it.name}:${it.version ?: ""}") }
+                    .flatMap { (it as ExternalModuleDependency).excludeRules }
+                    .map { ProjectDependencyExclusion(it.group, it.module) }
+                    .toSet(),
+                neverlink = projectContext.neverlinkDeps.contains("${artifact.module.id.group}:${artifact.module.id.name}"),
+                testonly = projectContext.testonlyDeps.contains("${artifact.module.id.group}:${artifact.module.id.name}"),
+            )
 }
 
-private fun walkDependencies(
-    resolvedDependency: ResolvedDependency,
-    project: Project,
-    resolveSrcJars: Boolean,
-    compileOnly: List<ProjectDependencyMatcher>,
-    testOnly: List<ProjectDependencyMatcher>
-): Iterable<ProjectDependency> {
-    val dependenciesWithArtifacts = resolvedDependency.children.filter { it.moduleArtifacts.isNotEmpty() }
-    val transitiveDeps =
-        dependenciesWithArtifacts.flatMap { walkDependencies(it, project, resolveSrcJars, compileOnly, testOnly) }
-            .toSet()
-    val firstOrderDeps =
-        dependenciesWithArtifacts.map { i -> transitiveDeps.first { j -> i.module.id == j.id } }.toSet()
+private data class DependencyGraphEdge(
+    val source: ArtifactIdentifier,
+    val target: ArtifactIdentifier,
+    val usage: DependencyUsage
+)
 
-    val id = resolvedDependency.module.id
-    val classifier = resolvedDependency.moduleArtifacts.first().classifier
-    val jar = resolvedDependency.moduleArtifacts.first().file
-
-    val dep = ProjectDependency(
-        id = id,
-        classifier = classifier,
-        dependencies = firstOrderDeps,
-        allDependencies = transitiveDeps,
-        jar = jar,
-        srcJar = if (resolveSrcJars) findSrcJar(id, project) else null,
-        neverlink = compileOnly.any { it.matches(id, classifier) },
-        testonly = testOnly.any { it.matches(id, classifier) }
-    )
-
-    return setOf(dep) + transitiveDeps
-}
-
-private fun findSrcJar(id: ModuleVersionIdentifier, project: Project): File? {
+private fun findSrcJar(project: Project, id: ModuleVersionIdentifier): File? {
     val sourcesArtifacts = project.dependencies.createArtifactResolutionQuery()
         .forModule(id.group, id.name, id.version)
         .withArtifacts(JvmLibrary::class, SourcesArtifact::class)
@@ -161,71 +224,7 @@ private fun findSrcJar(id: ModuleVersionIdentifier, project: Project): File? {
     if (sourcesArtifacts.size == 1) {
         return (sourcesArtifacts.first() as ResolvedArtifactResult).file
     } else if (sourcesArtifacts.size > 1) {
-        project.logger.warn("Artifact had multiple sources artifacts! Returning no srcJar for ${id}")
+        project.logger.warn("Artifact had multiple sources artifacts! Returning no srcJar for $id")
     }
     return null
-}
-
-fun dependencyLicenseData(
-    project: Project,
-    configuration: Provider<Configuration>,
-    projectDependencies: Provider<Set<ProjectDependency>>,
-    licenseOverrides: Provider<Map<String, String>>
-): Provider<Map<ProjectDependency, List<LicenseData>>> = project.provider {
-    val result: MutableMap<ProjectDependency, List<LicenseData>> = mutableMapOf()
-    val licenseReportExtension = project.extensions["licenseReport"] as LicenseReportExtension
-    val licenseConfigData =
-        ConfigurationReader(licenseReportExtension, CachedModuleReader(licenseReportExtension)).read(
-            project,
-            configuration.get()
-        )
-    for (it in projectDependencies.get()) {
-        val ld = ArrayList<LicenseData>()
-        val licenseOverride = licenseOverrides.get()[it.getMavenIdentifier()]
-        if (licenseOverride != null) {
-            project.logger.debug(
-                "Overriding license for {} with {}",
-                it.getMavenIdentifier(),
-                licenseOverride
-            )
-            ld.add(LicenseData(null, null, licenseOverride))
-        } else {
-            project.logger.debug("Using real licenses for {}", it.getMavenIdentifier())
-            val licenses = licenseConfigData.dependencies
-                .filter { d -> it.id.group == d.group && it.id.name == d.name && it.id.version == d.version }
-                .flatMap { md -> md.poms }
-                .flatMap { pom -> pom.licenses }
-            for (l in licenses) {
-                ld.add(LicenseData(l.name, l.url, null))
-            }
-        }
-        result[it] = ld
-    }
-    result
-}
-
-data class ProjectDependencyMatcher(
-    val group: String,
-    val name: String,
-    val version: String? = null,
-    val classifier: String? = null
-) {
-    companion object {
-        fun of(id: String): ProjectDependencyMatcher {
-            return id.split(':').let {
-                when (it.size) {
-                    2 -> ProjectDependencyMatcher(it[0], it[1])
-                    3 -> ProjectDependencyMatcher(it[0], it[1], it[2])
-                    4 -> ProjectDependencyMatcher(it[0], it[1], it[2], it[3])
-                    else -> throw IllegalArgumentException("Could not parse module identifier from $id")
-                }
-            }
-        }
-    }
-
-    fun matches(id: ModuleVersionIdentifier, classifier: String?): Boolean =
-        this.group == id.group
-                && this.name == id.name
-                && (this.version == null || this.version == id.version)
-                && (this.classifier == null || this.classifier == classifier)
 }

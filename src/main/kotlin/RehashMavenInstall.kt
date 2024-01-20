@@ -2,6 +2,7 @@ package com.github.zetten.bazeldeps
 
 import net.swiftzer.semver.SemVer
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
@@ -10,26 +11,25 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.kotlin.dsl.property
-import java.io.File
 
 @CacheableTask
 open class RehashMavenInstall : DefaultTask() {
 
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
-    val javaRepositoriesBzlFile: Property<File> = project.objects.property()
+    val javaRepositoriesBzlFile: RegularFileProperty = project.objects.fileProperty()
 
     // This task replaces in-place so this is technically @OutputFile as well...
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
-    val mavenInstallJsonFile: Property<File> = project.objects.property()
+    val mavenInstallJsonFile: RegularFileProperty = project.objects.fileProperty()
 
     @Input
-    val rulesJvmExternalVersion: Property<SemVer> = project.objects.property<SemVer>().convention(SemVer(4, 0))
+    val rulesJvmExternalVersion: Property<SemVer> = project.objects.property()
 
     @TaskAction
     fun rehashMavenInstall() {
-        val target = mavenInstallJsonFile.get()
+        val target = mavenInstallJsonFile.get().asFile
 
         val mavenInstallContents: Any =
             if (rulesJvmExternalVersion.get() >= SemVer(5, 0)) {
@@ -38,9 +38,11 @@ open class RehashMavenInstall : DefaultTask() {
                 updateMavenInstallJsonV1(MavenInstallJsonV1Contents.from(target))
             }
 
-        objectMapper.writeValue(mavenInstallJsonFile.get(), mavenInstallContents)
+        objectMapper.writer(MavenInstallPrettyPrinter())
+            .writeValue(mavenInstallJsonFile.get().asFile, mavenInstallContents)
     }
 
+    //
     private fun updateMavenInstallJsonV2(it: MavenInstallJsonV2Contents): MavenInstallJsonV2Contents {
         val javaRepositoriesBzl = parseJavaRepositoriesBzl()
 
@@ -74,7 +76,7 @@ open class RehashMavenInstall : DefaultTask() {
 
     private fun parseJavaRepositoriesBzl(): JavaRepositoriesBzl {
         // Parse the inputs from our java_repositories.bzl file - this could get messy if it's been modified, but it'll do for most cases
-        val inputs = javaRepositoriesBzlFile.get().readText()
+        val inputs = javaRepositoriesBzlFile.get().asFile.readText()
         val dependencies =
             Regex(
                 "^\\s+maven.artifact\\(" +
@@ -90,28 +92,38 @@ open class RehashMavenInstall : DefaultTask() {
                         "\\),$", RegexOption.MULTILINE
             ).findAll(inputs).map {
                 (it.groups as MatchNamedGroupCollection).let { groups ->
-                    MavenSpec(
-                        groups["group"]!!.value,
-                        groups["artifact"]!!.value,
-                        groups["version"]!!.value,
-                        packaging = groups["packaging"]?.value,
-                        classifier = groups["classifier"]?.value,
-                        overrideLicenseTypes = groups["overrideLicenseTypes"]?.value?.split(", ")
-                            ?.map { s -> s.removeSurrounding("\"") },
-                        neverlink = groups["neverlink"]?.value,
-                        testonly = groups["testonly"]?.value,
+                    ProjectDependency(
+                        ArtifactIdentifier(
+                            groups["group"]!!.value,
+                            groups["artifact"]!!.value,
+                            groups["version"]!!.value,
+                            packaging = groups["packaging"]?.value ?: "jar",
+                            classifier = groups["classifier"]?.value
+                        ),
+                        dependencies = emptySet(),
+                        runtimeOnlyDependencies = emptySet(),
+                        compileOnlyDependencies = emptySet(),
+                        exclusions = groups["exclusions"]?.value?.let { exclusions ->
+                            Regex("^(?:\"(.*)\",?)*$").findAll(exclusions)
+                                .map { exclusion ->
+                                    exclusion.groups[1]!!.value.split(":")
+                                        .let { e -> ProjectDependencyExclusion(e[0], e[1]) }
+                                }.toSet()
+                        } ?: emptySet(),
+                        neverlink = groups["neverlink"]?.value == "True",
+                        testonly = groups["testonly"]?.value == "True",
                     )
                 }
             }.toList()
         val repositories =
-            Regex("^\\s+\"(.*)\",$", RegexOption.MULTILINE).findAll(inputs).map { it.groupValues[1] }
-                .toList()
+            Regex("REPOSITORIES = \\[\\s*\"(.*)\"(,\\s+)?]", RegexOption.MULTILINE)
+                .findAll(inputs).map { it.groupValues[1] }.toList()
 
         return JavaRepositoriesBzl(dependencies, repositories)
     }
 }
 
 data class JavaRepositoriesBzl(
-    val dependencies: List<MavenSpec>,
+    val dependencies: List<ProjectDependency>,
     val repositories: List<String>
 )
