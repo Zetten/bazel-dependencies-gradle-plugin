@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.github.zetten"
-version = "3.0.0"
+version = "3.0.1"
 
 description = """
 Generate Bazel Java dependency rules from Gradle project configuration
@@ -33,6 +33,12 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:${junitVersion}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("com.google.truth:truth:${truthVersion}")
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
 }
 
 gradlePlugin {

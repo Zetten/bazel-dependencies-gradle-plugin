@@ -74,6 +74,7 @@ class BazelDependenciesPlugin : Plugin<Project> {
 
                 fun loadDep(artifact: ResolvedDependency, usage: DependencyUsage) {
                     val thisNode = DependencyGraphNode(artifact, projectContext)
+                    dependencyGraph.addNode(thisNode)
                     artifact.children
                         .filter { it.moduleArtifacts.isNotEmpty() && thisNode.exclusions.none { excludeRule -> excludeRule.group == it.moduleGroup && excludeRule.artifact == it.moduleName } }
                         .forEach { dep ->
